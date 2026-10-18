@@ -15,6 +15,12 @@ let settings={sensitivity:1,volume:.35,quality:'medium',reducedEffects:false};tr
 const gameNow=()=>Date.now()+serverOffset;
 let state=null,local=null,self=null,socket=null,remote=false,tab='terminal',panelOpen=false,guideOpen=false,viewOpen=null,active=false,toastTimeout=null;
 let termHistory=[{cmd:'',text:'DEAD DROP TERMINAL v0.3\nSYSTEM READY. Enter "help" to list commands.'}],scanBusy=false,nearby=null,lastIntrusion=false;
+function syncScrapeResult(){
+  const done=state?.terminal?.lastScan;if(!done)return;
+  let entry=termHistory.find(row=>row.scanId===done.id);
+  if(!entry){entry={cmd:'scrape '+done.folder,scanId:done.id,text:done.text};termHistory.push(entry);}
+  else entry.text=done.text;
+}
 let lastStateSignature='',inFlight=false,marketCode='',marketResult='AWAITING INPUT...',marketSale='';
 const notify=text=>{const e=$('toast');e.textContent=text;e.classList.add('show');clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>e.classList.remove('show'),4000);};
 function rawState(){
@@ -79,6 +85,7 @@ function enter(){
 }
 function refresh(){
   if(!state)return;
+  syncScrapeResult();
   updateHud();
   const intr=panelOpen?state.intrusion:null;
   if(intr&&!lastIntrusion){audio.alarm();if(viewOpen)closeView();lastIntrusion=true;document.exitPointerLock?.();$('intrusion').classList.remove('hidden');$('panel').classList.add('hidden');notify('INTRUSION DETECTED');}
@@ -156,8 +163,10 @@ function goInteract(t){
 function viewTerminal(){
   const prefix=state.terminal?.target||'local';
   const cwd=state.terminal?.cwd||'/';
+  const scan=state.terminal?.scan;
+  const scanner=scan?'<div class="scrapeStatus" role="status"><div><strong>● SCRAPING '+esc(scan.target)+':/'+esc(scan.folder)+'</strong><span id="scrapeCountdown">10.0s remaining</span></div><div class="scrapeTrack"><i id="scrapeProgress"></i></div><small>ONE FOLDER AT A TIME · RESULTS UNLOCK AFTER 10 SECONDS · NO COOLDOWN</small></div>':'';
   return '<div class="terminal"><div class="terminalTop"><span>● PRIVATE SHELL</span><span>'+esc(prefix)+':'+esc(cwd)+'</span></div>'+
-    '<div id="terminalLog" class="terminalLog">'+termHistory.map(e=>'<div class="cmd">'+(e.cmd?'root@dead-drop:~$ '+esc(e.cmd):'')+'</div><div class="output">'+esc(e.text)+'</div>').join('')+'</div>'+
+    '<div id="terminalLog" class="terminalLog">'+termHistory.map(e=>'<div class="cmd">'+(e.cmd?'root@dead-drop:~$ '+esc(e.cmd):'')+'</div><div class="output">'+esc(e.text)+'</div>').join('')+'</div>'+scanner+
     '<form id="terminalForm" class="consoleForm"><label for="terminalInput">root@'+esc(prefix)+':~$</label><input id="terminalInput" autocomplete="off" spellcheck="false" maxlength="140" placeholder="type help"><button aria-label="Execute command">↵</button></form></div>';
 }
 function evidence(){return '<div class="section"><h3>LOCAL EVIDENCE</h3>'+state.extracted.map(x=>`<div class="listing"><div><b>${esc(x.title)}</b><small>${esc(x.from)} / ${x.failed?'DEADLINE MISSED':'DELIVER BEFORE LEASE EXPIRES'}</small></div><button data-evidence="${esc(x.id)}" ${x.sold||x.failed?'disabled':''}>${x.sold?'SOLD':x.failed?'EXPIRED':'SELL $'+x.payout}</button></div>`).join('')+'</div>';}
@@ -185,8 +194,8 @@ function renderPanel(){
       termHistory.push({cmd:line,text:'WORKING...'});inp.value='';renderPanel();scanBusy=true;
       const entry=termHistory[termHistory.length-1];
       const result=await command('terminal',{line});
-      await new Promise(resolve=>setTimeout(resolve,Math.min(1300,result?.delay||180)));
-      entry.text=result?.text||'No reply.';scanBusy=false;
+      await new Promise(resolve=>setTimeout(resolve,Math.min(1300,result?.delay??180)));
+      entry.text=result?.text||'No reply.';entry.scanId=result?.scanId||null;scanBusy=false;
       if(panelOpen && !state.intrusion && tab==='terminal'){renderPanel();$('terminalInput')?.focus();}
     };
     $('terminalLog').scrollTop=$('terminalLog').scrollHeight;inp?.focus();
@@ -298,7 +307,13 @@ window.__deadDropReady = true;
 setInterval(()=>{
   if(!active)return;
   if(local){tick(local);rawState();}
-  renderIntrusion();document.querySelectorAll('[data-deadline]').forEach(el=>{el.textContent=Math.max(0,Math.ceil((Number(el.dataset.deadline)-gameNow())/1000))+'s';});if(remote)updateHud();if($('remoteClock'))$('remoteClock').textContent=Math.ceil(Math.max(0,(state.remoteSession?.expires||gameNow())-gameNow())/1000)+'s '+(state.horror.active||!state.environment.power?'PAUSED':'LEASE');
+  renderIntrusion();
+  if(state?.terminal?.scan&&panelOpen&&tab==='terminal'){
+    const scan=state.terminal.scan,left=Math.max(0,scan.finishesAt-gameNow());
+    if($('scrapeCountdown'))$('scrapeCountdown').textContent=(left/1000).toFixed(1)+'s remaining';
+    if($('scrapeProgress'))$('scrapeProgress').style.width=(Math.min(1,Math.max(0,(gameNow()-scan.startedAt)/10000))*100).toFixed(1)+'%';
+  }
+  document.querySelectorAll('[data-deadline]').forEach(el=>{el.textContent=Math.max(0,Math.ceil((Number(el.dataset.deadline)-gameNow())/1000))+'s';});if(remote)updateHud();if($('remoteClock'))$('remoteClock').textContent=Math.ceil(Math.max(0,(state.remoteSession?.expires||gameNow())-gameNow())/1000)+'s '+(state.horror.active||!state.environment.power?'PAUSED':'LEASE');
 },180);
 
 $('closeStation').onclick=closeStation;
