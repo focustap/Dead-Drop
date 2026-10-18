@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {newRoom,addPlayer,gameAction,tick} from '../shared/core.js';
+import {newRoom,addPlayer,gameAction,tick,schedulePowerOutage} from '../shared/core.js';
 import {startEncounter} from '../shared/horror.js';
 import {STATIONS} from '../shared/layout.js';
 
@@ -72,22 +72,24 @@ test('peephole scare blocks hallway entry with exact warning and frees the exit 
   assert.equal(r.players.a.zone,'hall');
 });
 
-test('outages cannot occur early or repeatedly within a long cooldown',t=>{
-  const c=setup(t),r=c.r;
-  let rolls=0;const random=[.48,.03,.11];
-  t.mock.method(Math,'random',()=>random[rolls++%random.length]);
-  r.environment.nextOutageAt=c.now+60000;r.nextEvent=c.now;
-  c.advance(100);
+test('outages have a grace period, rare roll requirement and a long cooldown',t=>{
+  const c=setup(t),r=c.r,now=c.now;
+  r.environment.nextOutageAt=now+60000;
+  assert.equal(schedulePowerOutage(r,now+10000,0),false);
   assert.equal(r.environment.warning,null);
-  rolls=0;r.nextEvent=c.now;
-  c.advance(61000);
-  assert.ok(r.environment.warning);
-  const allowedAfter=r.environment.nextOutageAt;
-  assert.equal(allowedAfter,c.now+300000);
-  c.advance(12000);
+  assert.equal(schedulePowerOutage(r,now+60001,.26),false);
+  assert.equal(r.environment.warning,null);
+  assert.equal(schedulePowerOutage(r,now+60002,.10),true);
+  assert.equal(r.environment.warning.at,now+72002);
+  const next=r.environment.nextOutageAt;
+  assert.equal(next,now+360002);
+  assert.equal(schedulePowerOutage(r,now+70000,.01),false);
+  assert.equal(r.environment.nextOutageAt,next);
+  c.advance(73000);
   assert.equal(r.environment.power,false);
-  r.environment.power=true;r.nextEvent=c.now;rolls=0;
-  c.advance(100);
+  r.environment.power=true;
+  assert.equal(schedulePowerOutage(r,now+80000,.01),false);
   assert.equal(r.environment.warning,null);
-  assert.ok(c.now<allowedAfter);
+  assert.equal(schedulePowerOutage(r,next,.02),true);
+  assert.ok(r.environment.warning);
 });
