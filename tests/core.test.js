@@ -148,3 +148,13 @@ test('power warning can be countered and public state keeps personal sessions pr
   r.environment.warning={at:1};tick(r);assert.equal(r.environment.power,false);assert.match(terminalCommand(r,'p1','ls').text,/NO POWER/);
   const state=publicState(r,'p2');assert.equal(state.terminal.target,null);assert.equal(state.records,undefined);assert.equal(state.challenges,undefined);
 });
+test('unknown inherited listings cannot corrupt the shared wallet',()=>{
+  const r=roomWithPlayer();for(const item of ['__proto__','constructor','toString'])assert.equal(gameAction(r,'p1','buy',{item}).ok,false);
+  assert.equal(r.bank,185);assert.equal(r.ledger.expenses,0);
+});
+test('crew messages are bounded and become visible to teammates',()=>{
+  const r=roomWithPlayer();addPlayer(r,'p2','Peer');
+  assert.equal(gameAction(r,'p1','message:send',{text:'Watering the tent'}).ok,true);
+  assert.equal(publicState(r,'p2').messages[0].text,'Watering the tent');
+  gameAction(r,'p1','message:send',{text:'a'.repeat(1000)});assert.equal(r.messages[0].text.length,160);
+});
