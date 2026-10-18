@@ -429,3 +429,54 @@ body:has(.surveillance:not(.hidden)) #hud,body:has(.surveillance:not(.hidden)) #
 .site-sales button:disabled{opacity:.45;cursor:not-allowed;transform:none}
 @media(max-width:980px){.ahStats{grid-template-columns:repeat(2,minmax(0,1fr))}.ahListing{flex-direction:column;align-items:stretch}.ahListingForm{min-width:0}}
 @media(max-width:660px){.ahHeroGlyph{display:none}.ahHero{padding:24px 19px}.ahDashboard,.ahOffers,.ahPickup{padding:18px 14px}.ahStats{gap:7px}.ahStats>div{padding:12px}.ahBuyerGrid{grid-template-columns:minmax(0,1fr)}.ahCounter>div{grid-template-columns:65px 80px minmax(0,1fr)}.ahBuyerActions{grid-template-columns:1fr}.ahPickup>header,.ahOffers>header{align-items:start;flex-direction:column}}
+
+
+/* Nightjar supply storefront complements the Afterhours seller exchange. */
+.site-market{--site:#b9d4a1;background:#0e1512;color:#eee8db;border-color:#374e3f}
+.site-market>header{background:#18231c;border-bottom-color:#455b44}
+.site-market>header b{font-size:21px;letter-spacing:.21em}
+.nightjar{font-family:var(--mono);overflow:hidden}
+.nightjar *{box-sizing:border-box}
+.njHero{padding:30px 32px 36px;background:radial-gradient(ellipse at 84% 56%,#52734940,transparent 48%),repeating-linear-gradient(0deg,#b7c9ab06 0px,#b7c9ab06 1px,transparent 1px,transparent 9px),linear-gradient(135deg,#1d3026,#121c17);border-bottom:1px solid #66805b}
+.njLive{font:10px var(--mono);letter-spacing:1.4px;color:#c9d8a9;display:flex;align-items:center;gap:10px}
+.njHeroContent{display:flex;justify-content:space-between;align-items:center;gap:30px}
+.njHero h2{font:900 clamp(35px,4vw,55px)/1.05 var(--display);letter-spacing:-1.5px;color:#f1efdf;margin:25px 0 14px}
+.njHero em{font-style:normal;color:#b7d497}
+.njHero p{color:#b3c1b3;font:12px/1.8 var(--mono);max-width:560px}
+.njHeroTags{display:flex;flex-wrap:wrap;gap:8px;margin-top:25px}
+.njHeroTags span{border:1px solid #688368;color:#c5d9b8;padding:8px 10px;font:9px var(--mono);letter-spacing:1px;background:#243c2a}
+.njMark{border:2px solid #92b578;color:#cce6b4;box-shadow:0 0 0 12px #a5c99512,inset 0 0 36px #88a97525;width:165px;height:165px;border-radius:50%;display:flex;align-items:center;justify-content:center;gap:3px;transform:rotate(-12deg);flex-shrink:0;font:900 40px var(--display)}
+.njMark span{font-size:49px}
+.njShelf{padding:28px 25px}
+.njSectionHead{display:flex;justify-content:space-between;align-items:end;gap:15px;margin-bottom:20px}
+.njSectionHead small{color:#a9c795;font:10px var(--mono);letter-spacing:1.5px}
+.njSectionHead h3{font:800 27px var(--display);color:#f3eddc;margin:8px 0}
+.njSectionHead>span{font:10px var(--mono);color:#9baf9c}
+.njProducts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.site-market .njProduct{background:#18241d;border:1px solid #46604b;padding:0;overflow:hidden;display:flex;flex-direction:column}
+.njItemTop{display:flex;justify-content:space-between;gap:9px;padding:15px 17px 0;font:9px var(--mono);color:#a0b49b;letter-spacing:.07em}
+.njItemTop i{color:#97d6ab;font-style:normal}
+.njSymbol{height:138px;margin:12px 17px 0;display:grid;place-items:center;background:radial-gradient(circle at 50% 45%,#59785388 0%,#2b453340 48%,#1c3224 100%);border:1px solid #435d45}
+.njSymbol span{font:900 86px var(--display);color:#cae6b9;text-shadow:0 0 25px #a9d39f66}
+.nj-soil{background:radial-gradient(circle,#6a5d4480,#28291d)}
+.nj-soil span{color:#d1b18b}
+.nj-wrap{background:radial-gradient(circle,#658c8877,#19302b)}
+.nj-wrap span{color:#b9ded3}
+.njProductInfo{padding:18px 17px 8px;flex:1}
+.njProductInfo small{font:9px var(--mono);color:#abd7b6;letter-spacing:.06em}
+.njProduct h4{font:800 20px var(--display);color:#f1eadd;margin:8px 0}
+.njProduct p{font:11px/1.65 var(--mono);color:#a7b5a5;margin:0}
+.njProductBuy{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid #465a48;margin:16px 17px 17px;padding-top:15px}
+.njProductBuy strong{font:800 25px var(--display);color:#e9d5a3}
+.njProductBuy button{background:#b4d09f;color:#15251b;border:1px solid #d4e3c7;padding:11px 12px;font:700 10px var(--mono);cursor:pointer}
+.njProductBuy button:hover{background:#d0e8b6}
+.njInstructions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding:22px 27px;background:#202b22;border-top:1px solid #4a5e49}
+.njInstructions>div{border-left:2px solid #8fb27d;padding-left:14px}
+.njInstructions small{display:block;font:9px var(--mono);color:#a2c19a}
+.njInstructions b{display:block;font:800 16px var(--display);margin-top:9px;color:#f0e7d9}
+.njInstructions p{font:10px/1.6 var(--mono);color:#a7b4a4}
+.njFoot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#101912;border-top:1px solid #455845;padding:13px 26px;font:9px var(--mono);letter-spacing:1px;color:#849b83}
+.njFoot span{color:#bad3a7}
+.site-market button:focus-visible{outline:2px solid #daffc2;outline-offset:2px}
+@media(max-width:900px){.njProducts{grid-template-columns:1fr}.njSymbol{height:100px}.njProductInfo{padding-bottom:3px}.njProductBuy{margin-top:9px}.njMark{display:none}}
+@media(max-width:600px){.njHero{padding:21px}.njShelf{padding:16px}.njSectionHead{flex-direction:column;align-items:start}.njInstructions{grid-template-columns:1fr}}
