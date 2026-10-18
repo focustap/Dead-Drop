@@ -1,3 +1,4 @@
+import {HorrorScene} from './horror.js';
 import {slide,STATIONS} from '../shared/layout.js';
 import * as THREE from 'three';
 import {SecurityViews,character} from './security.js';
@@ -23,7 +24,7 @@ export class World{
     this.clock=new THREE.Clock();this.yaw=0;this.pitch=0;this.pos=new THREE.Vector3(-1.2,1.65,-.75);
     this.keys=new Set();this.players=new Map();this.interactions=[];this.near=null;this.lastMove=0;
     this.lights={};this.build();
-    this.security=new SecurityViews(this.scene,this.renderer);this.view=null;
+    this.security=new SecurityViews(this.scene,this.renderer);this.horrorScene=new HorrorScene(this.scene,this.camera);this.view=null;this.zone='apartment';
     this.resize();window.addEventListener('resize',()=>this.resize());
     this.renderer.domElement.addEventListener('click',()=>{if(this.callbacks.canMove?.())this.renderer.domElement.requestPointerLock?.();});
     document.addEventListener('pointerlockchange',()=>{
@@ -42,7 +43,11 @@ export class World{
     const scene=this.scene;
     const floor=mat('#64695f',1);floor.map=wornTexture('#7d8277',true);box(scene,10,.2,8,0,-.13,0,floor);
     const ceiling=mat('#1a2221');box(scene,10,.18,8,0,3.15,0,ceiling);
-    box(scene,10,3.1,.22,0,1.54,-4,paint);box(scene,10,3.1,.22,0,1.54,4,paint);
+    box(scene,10,3.1,.22,0,1.54,-4,paint);box(scene,5.8,3.1,.22,-2.1,1.54,4,paint);box(scene,2.1,3.1,.22,3.95,1.54,4,paint);box(scene,2.1,.65,.22,1.85,.3,4,paint);box(scene,2.1,.65,.22,1.85,2.83,4,paint);
+    box(scene,2.1,1.9,.05,1.85,1.55,3.96,new THREE.MeshStandardMaterial({color:'#354b51',transparent:true,opacity:.28,roughness:.1,metalness:.4}));
+    for(const x of [.78,1.85,2.92])box(scene,.06,2,.08,x,1.55,3.91,metal);
+    box(scene,1.15,2.5,.5,-1.8,1.25,3.58,wood2);for(const x of [-2.08,-1.52]){box(scene,.53,2.3,.06,x,1.25,3.3,wood);for(let i=0;i<7;i++)box(scene,.4,.025,.02,x,1.6+i*.07,3.26,dark);}
+    this.interactions.push({id:'hide',label:'HIDE IN WARDROBE',...STATIONS.hide});
     box(scene,.22,3.1,8,-5,1.54,0,paint);box(scene,.22,3.1,8,5,1.54,0,paint);
     // Distressed baseboards, pipes, and practical architectural details.
     for(const z of [-3.87,3.87]){box(scene,9.8,.18,.08,0,.09,z,wood2);box(scene,9.8,.06,.08,0,2.95,z,wood2);}
@@ -83,11 +88,11 @@ export class World{
     box(scene,1.25,.08,1.4,3.75,2.35,2.4,mat('#182e2a'));
     this.growLamp=box(scene,.95,.05,1.1,3.66,2.15,2.4,new THREE.MeshStandardMaterial({color:'#799c87',emissive:'#4b8363',emissiveIntensity:1}));
     this.interactions.push({id:'garden',label:'TEND GROW TENT',x:3.1,z:2.4,range:1.8});
-    this.interactions.push({id:'packaging',label:'PACK HARVEST',x:.6,z:2.9,range:1.8},{id:'breaker',label:'RESET FUSE BOX',x:4.1,z:.8,range:1.7});
+    this.interactions.push({id:'packaging',label:'PACK HARVEST',x:.6,z:2.9,range:1.8},{id:'breaker',label:'RESET HALLWAY FUSE BOX',...STATIONS.breaker},{id:'return',label:'RETURN TO APARTMENT 204',...STATIONS.return});
     box(scene,1.8,.1,.8,.6,.85,3.15,wood);for(const x of [-.15,1.35])box(scene,.08,.8,.65,x,.4,3.15,metal);
     this.harvestTray=box(scene,.55,.08,.40,.15,.94,3.12,mat('#455638'));
     this.packageMesh=box(scene,.40,.18,.30,.85,1,3.15,mat('#9b8862'));
-    box(scene,.15,.65,.45,4.7,1.45,.8,metal);this.breakerLamp=box(scene,.17,.08,.08,4.6,1.64,.8,green);
+    this.breakerLamp=box(scene,.04,.08,.12,8.48,1.7,1,green);
     this.plantGroup=new THREE.Group();this.plantGroup.position.set(3.65,.64,2.4);scene.add(this.plantGroup);
     cylinder(scene,.32,.24,.36,3.65,.40,2.4,mat('#5a5142'));this.soilMesh=cylinder(scene,.29,.29,.04,3.65,.59,2.4,mat('#28201a'));
     cylinder(this.plantGroup,.025,.035,.8,0,.4,0,mat('#445b38'));
@@ -115,7 +120,7 @@ export class World{
         const norm=Math.hypot(forward,side)||1;forward/=norm;side/=norm;
         const dx=(-Math.sin(this.yaw)*forward+Math.cos(this.yaw)*side)*dt*speed;
         const dz=(-Math.cos(this.yaw)*forward-Math.sin(this.yaw)*side)*dt*speed;
-        const resolved=slide(this.pos,{x:this.pos.x+dx,z:this.pos.z+dz});this.pos.x=resolved.x;this.pos.z=resolved.z;
+        const resolved=slide(this.pos,{x:this.pos.x+dx,z:this.pos.z+dz},this.zone);this.pos.x=resolved.x;this.pos.z=resolved.z;
         const dirtyPosition=Math.abs(this.pos.x-(this.lastSentX??Infinity))>.001||Math.abs(this.pos.z-(this.lastSentZ??Infinity))>.001;
         if((dx||dz||dirtyPosition||Math.abs((this.lastSentYaw??Infinity)-this.yaw)>.005)&&performance.now()-this.lastMove>75){
           this.lastMove=performance.now();this.lastSentYaw=this.yaw;this.lastSentX=this.pos.x;this.lastSentZ=this.pos.z;
@@ -123,7 +128,7 @@ export class World{
         }
       }
       for(const o of this.players.values()){const moving=o.position.distanceTo(o.userData.target)>.025;o.position.lerp(o.userData.target,Math.min(1,dt*12));o.rotation.y=o.userData.yaw;o.userData.legs.forEach((leg,i)=>leg.rotation.x=moving?Math.sin(performance.now()*.008)*.4*(i?1:-1):0);}
-      const now=performance.now();this.security.animate(dt,now);this.lights.bulb.intensity=this.power?35+(Math.sin(now*.0012)*1.3)+(Math.sin(now*.067)>0.989?-18:0):.5;
+      const now=performance.now();this.security.animate(dt,now);this.horrorScene.animate(this.gameNow+now-this.gameStamp,dt);this.lights.bulb.intensity=this.power?35+(Math.sin(now*.0012)*1.3)+(Math.sin(now*.067)>0.989?-18:0):.5;
       if(this.feedbackUntil>now){const progress=(this.feedbackUntil-now)/900;this.can.rotation.z=Math.sin(progress*Math.PI)*-.6;this.waterStream.visible=this.feedbackAction==='garden:water';if(this.waterStream.visible)this.can.position.set(3.9,1.4,2.4);this.seedToken.visible=this.feedbackAction==='garden:plant';this.seedToken.position.y=.65+progress*.65;this.packageMesh.rotation.z=this.feedbackAction==='pack:seal'?Math.sin(progress*Math.PI)*.1:0;}else{this.can.rotation.z=0;this.can.position.set(3.2,.28,3.35);this.seedToken.visible=false;this.waterStream.visible=false;this.packageMesh.rotation.z=0;}
       this.camera.position.copy(this.pos);this.camera.rotation.set(this.pitch,this.yaw,0,'YXZ');
       this.near=this.view?null:this.nearby();this.callbacks.onFocus?.(this.near);
@@ -131,7 +136,7 @@ export class World{
     };loop();
   }
   applySettings(settings){this.sensitivity=Number(settings.sensitivity)||1;this.renderer.setPixelRatio(settings.quality==='low'?.75:settings.quality==='high'?Math.min(devicePixelRatio,1.75):1);this.renderer.shadowMap.enabled=settings.quality!=='low';this.security.quality=settings.quality;this.resize();}
-  updateGame(state,now){this.power=state.environment.power;this.security.signalLost=!this.power||state.environment.cameraUntil>now;this.security.serverNow=now;this.security.serverStamp=performance.now();const g=state.garden;this.plantGroup.visible=g.planted;this.plantGroup.scale.setScalar(.2+g.growth/125);this.soilMesh.visible=g.soil;this.lights.grow.intensity=g.light&&this.power?5:0;this.growLamp.material.emissiveIntensity=g.light&&this.power?1:0;this.seenActivities??=new Set();for(const {activity} of state.players)if(activity&&activity.until>now&&!this.seenActivities.has(activity.id)){this.seenActivities.add(activity.id);if(this.seenActivities.size>64)this.seenActivities.delete(this.seenActivities.values().next().value);this.stationFeedback(activity.action);}this.harvestTray.visible=state.inventory.buds>0;this.packageMesh.visible=state.inventory.packages>0;this.breakerLamp.material=this.power?green:red;}
+  updateGame(state,now){this.gameNow=now;this.gameStamp=performance.now();const me=state.players.find(p=>p.id===this.self);if(me){this.zone=me.zone;this.horrorScene.update(state,me);}this.power=state.environment.power;this.security.signalLost=!this.power||state.environment.cameraUntil>now;this.security.serverNow=now;this.security.serverStamp=performance.now();const g=state.garden;this.plantGroup.visible=g.planted;this.plantGroup.scale.setScalar(.2+g.growth/125);this.soilMesh.visible=g.soil;this.lights.grow.intensity=g.light&&this.power?5:0;this.growLamp.material.emissiveIntensity=g.light&&this.power?1:0;this.seenActivities??=new Set();for(const {activity} of state.players)if(activity&&activity.until>now&&!this.seenActivities.has(activity.id)){this.seenActivities.add(activity.id);if(this.seenActivities.size>64)this.seenActivities.delete(this.seenActivities.values().next().value);this.stationFeedback(activity.action);}this.harvestTray.visible=state.inventory.buds>0;this.packageMesh.visible=state.inventory.packages>0;this.breakerLamp.material=this.power?green:red;}
   stationFeedback(action){this.feedbackAction=action;this.feedbackUntil=performance.now()+900;}
   focusStation(id){const target=STATIONS[id];if(!target)return;this.yaw=Math.atan2(-(target.x-this.pos.x),-(target.z-this.pos.z));this.pitch=-.22;}
   setView(mode){this.view=mode==='alley'||mode==='peephole'?mode:null;this.security.setView(this.view);this.keys.clear();if(!this.view){this.near=this.nearby();this.callbacks.onFocus?.(this.near);}}
@@ -139,6 +144,7 @@ export class World{
   nearby(){
     let best=null,score=-1;const dir=new THREE.Vector3(0,0,-1).applyEuler(this.camera.rotation);const p=this.pos;
     for(const t of this.interactions){
+      if(this.zone==='hall'&&!['breaker','return'].includes(t.id)||this.zone!=='hall'&&['breaker','return'].includes(t.id))continue;
       const d=new THREE.Vector3(t.x-p.x,-.5,t.z-p.z),len=d.length();
       if(len>t.range)continue;
       const facing=d.normalize().dot(dir);
@@ -147,13 +153,14 @@ export class World{
     return best;
   }
   setOthers(players,self){
+    this.self=self;
     const living=new Set();
     for(const p of players||[]){if(!p||p.id===self)continue;living.add(p.id);let o=this.players.get(p.id);
       if(!o){o=character(this.scene,['#657e7d','#816f65','#8a7867','#575e62'][this.players.size%4],'crew');
         o.userData.carry=box(o,.44,.24,.3,0,.9,-.33,wood);this.scene.add(o);this.players.set(p.id,o);
         o.position.set(p.x,0,p.z);
       }
-      o.userData.carry.visible=!!p.carrying;o.userData.target=new THREE.Vector3(p.x||0,0,p.z||0);o.userData.yaw=p.yaw||0;
+      o.visible=!p.hidden&&p.connected;o.userData.carry.visible=!!p.carrying;o.userData.target=new THREE.Vector3(p.x||0,0,p.z||0);o.userData.yaw=p.yaw||0;
 
     }
     for(const [id,o] of this.players)if(!living.has(id)){this.scene.remove(o);this.players.delete(id);}

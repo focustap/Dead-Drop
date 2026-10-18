@@ -1,3 +1,4 @@
+import {visitorMotion,turnToward} from '../shared/npc.js';
 import * as THREE from 'three';
 import {wornTexture} from './surfaces.js';
 const mat=(c,rough=0.8,metal=0.08,extra={})=>new THREE.MeshStandardMaterial({color:c,roughness:rough,metalness:metal,...extra});
@@ -120,6 +121,7 @@ export class SecurityViews{
     box(s,.22,.7,.5,8.66,1.7,1,steel);box(s,.24,.06,.1,8.52,1.8,1,new THREE.MeshBasicMaterial({color:'#923d34'}));
     label(s,'EXIT →',8.7,2.45,-8,-Math.PI/2,'#a3e5a7');
     for(let i=0;i<12;i++)box(s,.01,.2+(i%3)*.13,.5,8.77,.45+(i%4)*.4,-12+i*2,mat('#41463c'));
+    box(s,.18,2.4,1.35,5.16,1.2,-1.45,steel);box(s,.19,2.25,1.18,5.18,1.12,-1.45,mat('#383e38'));box(s,.08,.06,.16,5.32,1.05,-1.08,mat('#b4a58b',.35,.6));label(s,'204',5.30,1.85,-1.45,Math.PI/2);
     this.hallPeople={courier:character(s,'#686451','courier'),intruder:character(s,'#24242b','intruder')};
     for(const g of Object.values(this.hallPeople)){g.position.set(7.1,0,-1.45);g.rotation.y=Math.PI/2;s.add(g);}
   }
@@ -143,13 +145,12 @@ export class SecurityViews{
     for(const [people,state,hall] of [[this.alleyPeople,this.alleyState,false],[this.hallPeople,this.doorState,true]])for(const person of Object.values(people)){
       if(!person.visible)continue;
       const approaching=now<state.waitAt,leaving=now>=state.leaveAt;
-      const progress=approaching?Math.max(0,1-(state.waitAt-now)/6500):leaving?Math.min(1,(now-state.leaveAt)/5000):0;
-      const motion=approaching?1-progress:leaving?progress:0;
-      const kind=person.userData.pose;
-      person.position.set(hall?7.05:kind==='thief'?-1.5:-.8,Math.sin(t*1.4)*.009,hall?-1.45-motion*10:-11+motion*4.3);
-      person.rotation.y=hall?(motion>.1?0:Math.PI/2):Math.PI+(kind==='thief'?Math.sin(t*1.7)*.55:Math.sin(t*.7)*.08);
+      const route=visitorMotion(state,now,hall),kind=person.userData.pose;
+      person.position.set(hall?7.05:kind==='thief'?-1.5:-.8,Math.sin(t*1.4)*.009,route.z);
+      if(person.userData.visitId!==state.id){person.userData.visitId=state.id;person.rotation.y=route.yaw;}
+      person.rotation.y=turnToward(person.rotation.y,route.yaw+(!approaching&&!leaving&&kind==='thief'?Math.sin(t*1.7)*.3:0),dt);
       person.rotation.z=!approaching&&!leaving&&kind==='intruder'?Math.sin(t)*.04:Math.sin(t)*.006;
-      const stride=motion>.02?Math.sin(t*7)*.45:Math.sin(t)*.02;
+      const stride=Math.sin(t*7)*.45*route.stride;
       person.userData.legs.forEach((leg,i)=>leg.rotation.x=stride*(i?1:-1));
       person.userData.arms.forEach((arm,i)=>{arm.rotation.x=kind==='courier'&&i===1?-.8:kind==='buyer'&&i===0?-.5:-stride*(i?1:-1)*.65;});
       person.rotation.x=state.outcome&&now-state.leaveAt<1300?-Math.sin((now-state.leaveAt)/1300*Math.PI)*.35:0;

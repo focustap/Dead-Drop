@@ -1,3 +1,4 @@
+import {newHorror} from './horror.js';
 export const NIGHT_MS=4*60*1000;
 export const QUOTAS=[650,850,1050,1250,1500,1800];
 export const CATALOG={
@@ -33,11 +34,13 @@ export function finishNight(r,now){
   r.summary={day:r.day,...r.ledger,gross,net:gross-r.ledger.expenses-r.ledger.losses,quota:r.quota,met,cycleEnd,cycleMet,cycleEarned:r.cycleEarned,cycleRequired:r.cycleRequired,bank:r.bank};
   r.history.push(r.summary);r.phase=cycleEnd&&!cycleMet?'lost':r.day===6?'won':'summary';
   r.reason=r.phase==='lost'?'The three-night deadline expired. Your contact pulled the operation.':r.phase==='won'?'Both contracts cleared. The crew leaves before dawn.':'';
-  r.intrusions={};r.challenges={};r.nightEnds=now;
+  r.intrusions={};r.challenges={};r.horror.active=null;r.nightEnds=now;
 }
 export function nextNight(r,now){
+  r.horror=newHorror(now);r.nextHack=now+75000;
+  for(const p of Object.values(r.players))Object.assign(p,{hidden:false,zone:'apartment',x:-1.2,z:-.75,stunnedUntil:0,scare:null});
   r.day++;r.quota=QUOTAS[r.day-1];r.ledger=ledger();r.phase='night';r.summary=null;
-  r.contracts=[];r.orders=[];
+  r.contracts=[];r.orders=[];r.remoteSessions={};r.remoteTargets={};
   if(r.day%3===1){r.cycleEarned=0;r.cycleRequired=0;}
   r.nightEnds=now+NIGHT_MS;r.lastTick=now;r.nextTarget=now+10000;r.nextEvent=now+35000;
   r.heat=Math.max(4,r.heat-18);r.environment={power:true,warning:null,cameraUntil:0};
