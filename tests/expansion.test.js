@@ -25,9 +25,11 @@ test('NPC route headings match approach and departure, with shortest smooth turn
   assert.ok(turnToward(0,Math.PI,.016)>0&&turnToward(0,Math.PI,.016)<Math.PI);
   assert.ok(Math.abs(turnToward(3.13,-3.13,.02)-3.13)<.01);
 });
-test('locked door prevents timed breach; unlocked breach charges the crew only once',t=>{
-  const c=setup(t),{r}=c;assert.equal(startEncounter(r,'door',c.now),true);c.advance(17000);assert.equal(r.bank,185);assert.equal(r.players.a.scare,undefined);
-  stand(r,'door');gameAction(r,'a','door:unlock');c.advance(250);assert.ok(r.players.a.scare);assert.ok(r.players.b.scare);const bank=r.bank;assert.ok(bank<185);c.advance(500);assert.equal(r.bank,bank);assert.equal(r.horror.locked,true);
+test('ignored door threat ends the run after a synced fatal scare, even with resting bolt',t=>{
+  const c=setup(t),{r}=c;assert.equal(r.horror.locked,true);assert.equal(startEncounter(r,'door',c.now),true);
+  c.advance(17000);assert.equal(r.phase,'breach');assert.equal(r.players.a.scare.kind,'door');assert.equal(r.players.b.scare.kind,'door');
+  c.advance(2800);assert.equal(r.phase,'lost');assert.match(r.reason,/Locksmith/);assert.equal(r.summary.day,1);
+  c.advance(4000);assert.equal(r.phase,'lost');
 });
 test('window ignores the lock, hiding protects each player for the full hunt',t=>{
   const c=setup(t),{r}=c;startEncounter(r,'window',c.now);stand(r,'hide');assert.equal(gameAction(r,'a','hide:enter').ok,true);r.players.b.carrying=3;
