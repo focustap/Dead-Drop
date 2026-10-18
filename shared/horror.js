@@ -3,7 +3,7 @@ import {atStation} from './layout.js';
 
 export const THREATS=[
   {id:'collector',name:'The Collector',look:'A broad masked figure with a sealed case. Comes for unpaid debt; a cleared account earns a quiet final visit.',sign:'The three-night payment deadline arrives with too little money in the crew wallet.',behavior:'Arrives after night three or six when the full quota cannot be collected and ends the operation. A successful night-six payment instead leads to a peaceful offer and a crew choice.',counter:'Keep $2,550 available by the end of night three, and $4,550 by the end of night six. Earnings spent on equipment cannot pay the Collector.',cost:'An unavoidable final encounter and the end of the run once payment has failed.'},
-  {id:'door',name:'The Locksmith',look:'An empty-handed hood tests the handle.',sign:'Three slow knocks. The latch rattles.',behavior:'Waits outside, then tries an unlocked door after ten seconds.',counter:'Keep the bolt locked. Use the peephole; collect couriers without leaving the latch open.',cost:'One shared wallet loss, shock, and heat. Hiding protects individuals from the scare.'},
+  {id:'door',name:'The Locksmith',look:'An empty-handed hood tests the handle.',sign:'Three slow knocks. The latch rattles.',behavior:'Tests the apartment door, then forces entry unless the crew actively braces or secures the latch during the warning.',counter:'When the handle rattles, reach the door and BRACE it before the countdown ends. A resting bolt alone is not enough against this intruder.',cost:'An unbraced breach ends the run for the whole crew after a full visual and audio attack.'},
   {id:'window',name:'The Window Prowler',look:'A person in a weathered coat crosses the courtyard and peers through the glass.',sign:'Footsteps on wet paving, movement between the lights, then tapping at the window.',behavior:'Approaches for eight seconds, then searches the window for a way inside.',counter:'Stand at the window and HOLD E continuously for five seconds to keep both curtains shut. One operator protects everyone. Releasing early resets the hold and hastens the attack; hiding remains a last resort after entry.',cost:'An entry can shock exposed operators, destroy carried harvest and cause one bounded crew loss.'},
   {id:'hall',name:'The Tenant',look:'A tall figure in the corridor under a failing ceiling lamp.',sign:'Heavy footsteps, a red flicker, and a shadow visible through the peephole.',behavior:'Twelve seconds of approach, then ten seconds patrolling outside the apartment.',counter:'Check the peephole. Wait indoors until it leaves, then visit the hallway fuse box. If already outside, return through door 204.',cost:'Caught operators are forced inside and shocked. A single crew penalty applies.'},
   {id:'echo',name:'Empty Rooms',look:'Distant pedestrians and empty landings outside rain-streaked glass.',sign:'Distant banging, footsteps, or a short light flicker.',behavior:'A brief harmless disturbance, sometimes preceding a long silence.',counter:'Observe. Do not open the door just because something knocked.',cost:'None. Not every sound belongs to a visitor.'},
@@ -22,12 +22,19 @@ export function startEncounter(r,kind,now=Date.now()){
   if(!['door','window','hall','echo'].includes(kind)||h.active||now<h.recoveryUntil||Object.keys(r.intrusions).length)return false;
   if(kind==='window'&&h.wardrobe)return false;
   if(kind==='door'&&r.door.visitor!=='empty')return false;
-  h.active={id:++h.serial,kind,phase:'warning',start:now,attackAt:now+(kind==='door'?16500:12000),ends:now+(kind==='door'?21000:22000),caught:[],charged:false};
+  h.active={id:++h.serial,kind,phase:'warning',start:now,attackAt:now+(kind==='door'?16500:12000),ends:now+(kind==='door'?21000:22000),caught:[],charged:false,braced:false};
   if(kind==='window'){h.active.approachUntil=now+8000;h.active.attackAt=now+23000;h.active.ends=now+33000;r.curtains=null;}
   if(kind==='echo'){h.active.attackAt=now+4000;h.active.ends=now+6000;}
   if(kind==='door'){r.door=visitor('intruder',now,'door');r.door.next=now+27000;}
   r.log.unshift({id:'encounter-'+h.serial,time:now,text:kind==='window'?'Wet footsteps cross the courtyard. Someone is coming to the window.':kind==='hall'?'Heavy hallway footsteps. A long shadow passes the peephole.':kind==='door'?'Three slow knocks. Someone tests the latch.':'A heavy bang from the empty apartment upstairs.'});
   r.log=r.log.slice(0,18);return true;
+}
+function fatalDoorBreach(r,event,now){
+  if(r.phase!=='night'||event.phase==='breached')return;
+  event.phase='breached';event.ends=now+2600;r.horror.locked=true;
+  r.phase='breach';r.breach={ends:now+2600};r.reason='The Locksmith forced the unsecured door. Nobody made it out.';
+  r.intrusions={};r.curtains=null;
+  for(const p of Object.values(r.players))if(p.connected){p.hidden=false;p.computerOpen=false;p.scare={id:'fatal-door-'+event.id,kind:'door',start:now,until:now+2500};p.stunnedUntil=now+2600;}
 }
 function catchPlayers(r,event,players,now){
   const fresh=players.filter(p=>p.connected&&!(p.safeUntil>now)&&!event.caught.includes(p.id));if(!fresh.length)return;
@@ -65,7 +72,7 @@ export function tickHorror(r,now){
     }
     if(a.kind==='window')catchPlayers(r,a,players.filter(p=>p.zone!=='hall'&&!p.hidden),now);
     if(a.kind==='hall')catchPlayers(r,a,players.filter(p=>p.zone==='hall'),now);
-    if(a.kind==='door'&&!h.locked){catchPlayers(r,a,players.filter(p=>p.zone!=='hall'&&!p.hidden),now);h.locked=true;}
+    if(a.kind==='door'&&!a.braced){fatalDoorBreach(r,a,now);return;}
   }
 }
 export function releaseCurtains(r,id,now){
@@ -105,13 +112,17 @@ export function horrorAction(r,p,action,now){
   }
   if(action==='hall:enter'){
     if(p.zone==='hall'||!atStation(p,'door'))return result(false,'Reach the apartment door.');
+    if(r.horror.peep&&now<r.horror.peep.ends)return result(false,"I wouldn't go outside right now...");
     if(r.horror.locked)return result(false,'Slide the bolt before entering the hallway.');
     Object.assign(p,{zone:'hall',x:6,z:-1.45,lastMove:now});r.horror.locked=true;
     return result(true,'Hallway. Door 204 locks behind you; your key opens it from outside.');
   }
   if(action==='door:lock'||action==='door:unlock'){
     if(!atStation(p,'door')||p.zone==='hall')return result(false,'Reach the apartment latch.');
-    r.horror.locked=action==='door:lock';return result(true,r.horror.locked?'Bolt locked.':'Bolt unlocked. Do not leave it unattended.');
+    r.horror.locked=action==='door:lock';
+    const encounter=r.horror.active;
+    if(encounter?.kind==='door'&&encounter.phase==='warning')encounter.braced=r.horror.locked;
+    return result(true,r.horror.locked?'Bolt secured against the intruder.':'Bolt unlocked. Do not leave it unattended.');
   }
   return null;
 }
