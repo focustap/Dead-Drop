@@ -16,7 +16,7 @@ export class World{
     this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;this.renderer.outputColorSpace=THREE.SRGBColorSpace;
     this.renderer.toneMapping=THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1;
     container.append(this.renderer.domElement);
-    this.clock=new THREE.Clock();this.yaw=0;this.pitch=0;this.pos=new THREE.Vector3(.1,1.65,2.25);
+    this.clock=new THREE.Clock();this.yaw=0;this.pitch=0;this.pos=new THREE.Vector3(-1.2,1.65,-.75);
     this.keys=new Set();this.players=new Map();this.interactions=[];this.near=null;this.lastMove=0;
     this.lights={};this.build();
     this.resize();window.addEventListener('resize',()=>this.resize());

@@ -42,7 +42,8 @@ async function command(event,payload={}){
 function enter(){
   active=true;$('lobby').classList.add('hidden');
   $('lookPrompt')?.remove();$('prompt').textContent='CLICK TO LOOK AROUND · WASD TO MOVE';
-  world.pos.set(0,1.65,2.35);world.yaw=0;
+  const current=state.players?.find(p=>p.id===self);
+  world.pos.set(current?.x??-1.2,1.65,current?.z??-.75);world.yaw=current?.yaw||0;
   refresh();
   if(!sessionStorage.getItem('dead-drop-guide')){openGuide();sessionStorage.setItem('dead-drop-guide','seen');}
 }

@@ -9,9 +9,7 @@ test('solo game boots a real WebGL room, and terminal help and market work',asyn
   if(await page.locator('#guide').isVisible())await page.locator('#guideOkay').click();
   const viewport=page.viewportSize();
   await page.mouse.click(viewport.width/2,viewport.height/2);
-  await page.keyboard.down('w');
   await expect(page.locator('#prompt')).toContainText('WORKSTATION',{timeout:15000});
-  await page.keyboard.up('w');
   await page.keyboard.press('e');
   await expect(page.locator('#panel')).toBeVisible();
   await expect(page.locator('#terminalInput')).toBeVisible();
@@ -36,9 +34,7 @@ test('an intrusion appears on command, responds to arrows and preserves the wall
   await page.goto('/');await page.locator('#solo').click();
   if(await page.locator('#guide').isVisible())await page.locator('#guideOkay').click();
   const v=page.viewportSize();await page.mouse.click(v.width/2,v.height/2);
-  await page.keyboard.down('w');
   await expect(page.locator('#prompt')).toContainText('WORKSTATION',{timeout:15000});
-  await page.keyboard.up('w');
   await page.keyboard.press('e');await expect(page.locator('#panel')).toBeVisible();
   const bank=await page.locator('#bank').textContent();
   await page.locator('#terminalInput').fill('training');await page.keyboard.press('Enter');

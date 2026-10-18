@@ -34,7 +34,7 @@ export function newRoom(code='LOCAL'){
 export function addPlayer(room,id,name){
   const count=Object.keys(room.players).length;
   if(count>=4)throw Error('The hideout is full (4 players).');
-  room.players[id]={id,name:String(name||'Runner').trim().slice(0,22)||'Runner',x:-1.2+(count%2)*2.2,z:1.6+Math.floor(count/2)*1.4,yaw:0};
+  room.players[id]={id,name:String(name||'Runner').trim().slice(0,22)||'Runner',x:-1.2+(count%2)*2.2,z:-.75+Math.floor(count/2)*1.4,yaw:0};
   room.terminals[id]={target:null,cwd:'/',seen:[]};log(room,room.players[id].name+' entered the hideout.');
 }
 export function movePlayer(room,id,p){
