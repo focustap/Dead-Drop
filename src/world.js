@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import {SecurityViews} from './security.js';
 const mesh=(geo,mat,x=0,y=0,z=0)=>{const o=new THREE.Mesh(geo,mat);o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;return o;};
 const mat=(color,roughness=.85,metalness=.05,extra={})=>new THREE.MeshStandardMaterial({color,roughness,metalness,...extra});
 const concrete=mat('#252e2c'),paint=mat('#39423e'),wood=mat('#443d36'),wood2=mat('#2f2b29'),metal=mat('#3d4549',.5,.6),dark=mat('#101a1e'),keymat=mat('#161d1f');
@@ -19,6 +20,7 @@ export class World{
     this.clock=new THREE.Clock();this.yaw=0;this.pitch=0;this.pos=new THREE.Vector3(-1.2,1.65,-.75);
     this.keys=new Set();this.players=new Map();this.interactions=[];this.near=null;this.lastMove=0;
     this.lights={};this.build();
+    this.security=new SecurityViews(this.scene,this.renderer);this.view=null;
     this.resize();window.addEventListener('resize',()=>this.resize());
     this.renderer.domElement.addEventListener('click',()=>{if(this.callbacks.canMove?.())this.renderer.domElement.requestPointerLock?.();});
     document.addEventListener('pointerlockchange',()=>this.callbacks.onLock?.(document.pointerLockElement===this.renderer.domElement));
@@ -27,7 +29,7 @@ export class World{
     window.addEventListener('keyup',e=>this.keys.delete(e.code));window.addEventListener('blur',()=>this.keys.clear());
     this.camera.position.copy(this.pos);this.animate();
   }
-  resize(){const el=this.renderer.domElement.parentElement;const w=el.clientWidth||innerWidth,h=el.clientHeight||innerHeight;this.renderer.setSize(w,h);this.camera.aspect=w/h;this.camera.updateProjectionMatrix();}
+  resize(){const el=this.renderer.domElement.parentElement;const w=el.clientWidth||innerWidth,h=el.clientHeight||innerHeight;this.renderer.setSize(w,h);this.camera.aspect=w/h;this.camera.updateProjectionMatrix();this.security?.resize(w,h);}
   build(){
     const scene=this.scene;
     const floor=mat('#303532',1);box(scene,10,.2,8,0,-.13,0,floor);
@@ -92,12 +94,14 @@ export class World{
         this.pos.x=Math.min(4.25,Math.max(-4.25,this.pos.x+dx));this.pos.z=Math.min(3.30,Math.max(-3.30,this.pos.z+dz));
         if((dx||dz)&&performance.now()-this.lastMove>75){this.lastMove=performance.now();this.callbacks.onMove?.({x:this.pos.x,z:this.pos.z,yaw:this.yaw});}
       }
-      const now=performance.now();this.lights.bulb.intensity=35+(Math.sin(now*.0012)*1.3)+(Math.sin(now*.067)>0.989?-18:0);
+      const now=performance.now();this.security.animate(dt,now);this.lights.bulb.intensity=35+(Math.sin(now*.0012)*1.3)+(Math.sin(now*.067)>0.989?-18:0);
       this.camera.position.copy(this.pos);this.camera.rotation.set(this.pitch,this.yaw,0,'YXZ');
-      this.near=this.nearby();this.callbacks.onFocus?.(this.near);
-      this.renderer.render(this.scene,this.camera);
+      this.near=this.view?null:this.nearby();this.callbacks.onFocus?.(this.near);
+      this.renderer.render(this.scene,this.security.camera()||this.camera);
     };loop();
   }
+  setView(mode){this.view=mode==='alley'||mode==='peephole'?mode:null;this.security.setView(this.view);this.keys.clear();}
+  setVisitors(alley,door){this.security.setVisitors(alley,door);}
   nearby(){
     let best=null,score=-1;const dir=new THREE.Vector3(0,0,-1).applyEuler(this.camera.rotation);const p=this.pos;
     for(const t of this.interactions){
