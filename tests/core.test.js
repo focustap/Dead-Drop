@@ -52,7 +52,9 @@ test('wrong input drains a bounded fraction; wallet vault reduces loss',()=>{
   const wrong=room.intrusions.p1.sequence[0]==='ArrowUp'?'ArrowDown':'ArrowUp';
   const answer=intrusionInput(room,'p1',wrong);
   assert.equal(answer.ok,false);assert.equal(room.bank,820);
-  room.upgrades.push('vault');terminalCommand(room,'p1','training');intrusionInput(room,'p1',wrong);
+  room.upgrades.push('vault');terminalCommand(room,'p1','training');
+  const secondWrong=room.intrusions.p1.sequence[0]==='ArrowUp'?'ArrowDown':'ArrowUp';
+  intrusionInput(room,'p1',secondWrong);
   assert.equal(room.bank,770);
 });
 test('timed-out intrusion damages the wallet and does not fire twice',()=>{

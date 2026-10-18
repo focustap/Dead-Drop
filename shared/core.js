@@ -90,12 +90,12 @@ export function terminalCommand(room,id,line){
   const active=state.target&&room.targets[state.target];
   if(room.intrusions[id])return {text:'SYSTEM LOCKED — repel the intrusion first.'};
   let output='';
-  if(verb==='help')output='AVAILABLE: help, targets, connect NAME, ls, pwd, cd NAME, cd .., cat FILE, scrape [FOLDER], cd scrape FOLDER, disconnect, training\nAll remote systems and recovered records are generated inside this game.';
+  if(verb==='help')output='AVAILABLE: help, targets, connect NAME, ls, pwd, cd NAME, cd .., cat FILE, scrape [FOLDER], cd scrape FOLDER, disconnect, training\nAll recovered records are local to this session.';
   else if(verb==='targets')output=Object.keys(room.targets).map(x=>'● '+x).join('\n');
   else if(verb==='connect'){
     const name=(words[1]||'').toUpperCase();
     if(!room.targets[name])output='Unknown simulated target. Use "targets".';
-    else{state.target=name;state.cwd='/';output='Dialing '+name+' ...\nSIMULATED CONNECTION ESTABLISHED.\nUse "ls" to explore its five folders.';}
+    else{state.target=name;state.cwd='/';output='Dialing '+name+' ...\nCONNECTION ESTABLISHED.\nUse "ls" to explore its five folders.';}
   }
   else if(verb==='disconnect'){state.target=null;state.cwd='/';output='Remote session closed.';}
   else if(verb==='training'){beginIntrusion(room,id);output='TRAINING ALARM: defend using arrows or WASD.';}
