@@ -72,7 +72,7 @@ function enter(){
 }
 function refresh(){
   if(!state)return;
-  updateHud();
+  updateHud();renderChallenge();
   const intr=state.intrusion;
   if(intr&&!lastIntrusion){if(viewOpen)closeView();lastIntrusion=true;document.exitPointerLock?.();$('intrusion').classList.remove('hidden');$('panel').classList.add('hidden');notify('INTRUSION DETECTED');}
   else if(!intr&&lastIntrusion){lastIntrusion=false;$('intrusion').classList.add('hidden');if(panelOpen)$('panel').classList.remove('hidden');notify('SYSTEM RESPONSE COMPLETE');}

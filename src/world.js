@@ -26,7 +26,12 @@ export class World{
     this.security=new SecurityViews(this.scene,this.renderer);this.view=null;
     this.resize();window.addEventListener('resize',()=>this.resize());
     this.renderer.domElement.addEventListener('click',()=>{if(this.callbacks.canMove?.())this.renderer.domElement.requestPointerLock?.();});
-    document.addEventListener('pointerlockchange',()=>this.callbacks.onLock?.(document.pointerLockElement===this.renderer.domElement));
+    document.addEventListener('pointerlockchange',()=>{
+      const locked=document.pointerLockElement===this.renderer.domElement;
+      // The lock request may finish after E has opened a station. Release that late lock.
+      if(locked&&!this.callbacks.canMove?.()){document.exitPointerLock();return;}
+      this.callbacks.onLock?.(locked);
+    });
     document.addEventListener('mousemove',e=>{if(document.pointerLockElement!==this.renderer.domElement)return;this.yaw-=e.movementX*.0021*this.sensitivity;this.pitch=Math.max(-1.33,Math.min(1.33,this.pitch-e.movementY*.0021*this.sensitivity));});
     window.addEventListener('keydown',e=>{if(['KeyW','KeyA','KeyS','KeyD','ShiftLeft','ShiftRight'].includes(e.code))this.keys.add(e.code);});
     window.addEventListener('keyup',e=>this.keys.delete(e.code));window.addEventListener('blur',()=>this.keys.clear());

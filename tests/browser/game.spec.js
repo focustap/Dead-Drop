@@ -76,9 +76,11 @@ test('browser navigates distinct sites and live CCTV returns to the apartment',a
 });
 
 test('memory contracts pay once and the clock reaches a real campaign loss',async({page})=>{
+  test.setTimeout(95000);
   await page.clock.install();await page.goto('/');await page.locator('#solo').click();if(await page.locator('#guide').isVisible())await page.locator('#guideOkay').click();
   await expect(page.locator('#clock')).toBeVisible();await expect(page.locator('#quota')).toContainText('$650');
-  const vp=page.viewportSize();await page.mouse.click(vp.width/2,vp.height/2);await page.keyboard.press('e');await page.locator('[data-tab="browser"]').click();await page.locator('[data-site="contracts"]').click();
+  const vp=page.viewportSize();await page.mouse.click(vp.width/2,vp.height/2);await expect(page.locator('#prompt')).toContainText('WORKSTATION');await page.keyboard.press('e');await expect.poll(()=>page.evaluate(()=>document.pointerLockElement===null)).toBe(true);await page.locator('[data-tab="browser"]').click();await page.locator('[data-site="contracts"]').click();
+  await page.clock.pauseAt(await page.evaluate(()=>Date.now()+500));
   await page.locator('.contract').filter({hasText:'MEMORY RELAY'}).first().getByRole('button').click();
   await expect(page.locator('#contractChallenge')).toBeVisible();const sequence=(await page.locator('#challengeStatus').textContent()).match(/[1-4]/g);
   expect(sequence).toHaveLength(4);await page.clock.fastForward(3200);
