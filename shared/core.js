@@ -41,7 +41,7 @@ export function newRoom(code='LOCAL'){
     targets,records,remoteTargets:{},remoteSessions:{},extractions:{},scans:0,targetSerial:4,ledger:ledger(),cycleEarned:0,cycleRequired:QUOTAS[0],settlements:{},collector:null,curtains:null,history:[],summary:null,
     inventory:{seeds:0,soil:2,buds:0,wrap:2,packages:0},garden:{soil:false,planted:false,moisture:0,growth:0,light:true},
     pending:[],orders:[],contracts:[],messages:[],alley:{visitor:'empty',next:now+14000},door:{visitor:'empty',next:now+23000},nightEnds:now+NIGHT_MS,
-    horror:newHorror(now),nextHack:now+75000,environment:{power:true,warning:null,cameraUntil:0},lastTick:now,nextTarget:now+40000,nextEvent:now+45000,
+    horror:newHorror(now),nextHack:now+75000,environment:{power:true,warning:null,cameraUntil:0,nextOutageAt:now+160000},lastTick:now,nextTarget:now+40000,nextEvent:now+45000,
     log:[{id:uid(),time:now,text:'Night one. Recover records, grow inventory, make the deadline.'}]};
 }
 export function addPlayer(room,id,name){
@@ -251,7 +251,7 @@ export function gameAction(room,id,action,payload={}){
     room.door.leaveAt=now;room.door.next=now+6000;
   }else if(action==='door:brace'){
     room.horror.locked=true;
-    if(room.horror.active?.kind==='door'){room.horror.active=null;room.horror.recoveryUntil=now+30000;}
+    if(room.horror.active?.kind==='door'){room.horror.active.braced=true;room.horror.active=null;room.horror.recoveryUntil=now+30000;}
     if(room.door.visitor==='empty')return fail('The door is already secure.');
     room.door.leaveAt=now;room.door.next=now+6000;room.heat=Math.max(0,room.heat-3);message='Chain secured. The footsteps retreat.';
   }else if(action==='breaker:reset'){
@@ -266,6 +266,12 @@ function replenish(room,now){
 }
 export function tick(room,now=Date.now()){
   if(room.phase==='collector')return tickCollector(room,now);
+  if(room.phase==='breach'){
+    if(now>=room.breach.ends){room.phase='lost';room.horror.active=null;
+      const gross=income(room);room.summary={day:room.day,...room.ledger,gross,net:gross-room.ledger.expenses-room.ledger.losses,quota:room.quota,quotaPaid:0,cycleEnd:false,bank:room.bank,nightsRemaining:nightsRemaining(room.day)};
+    }
+    return true;
+  }
   if(room.phase==='ending'){const result=tickEnding(room,now);if(room.phase==='night')replenish(room,now);return result;}
   if(room.phase!=='night')return false;
   if(now>=room.nightEnds){finishNight(room,room.nightEnds);return true;}
@@ -304,7 +310,10 @@ export function tick(room,now=Date.now()){
     const choice=room.policePending?'hall':pick(options);
     if(room.policePending&&startEncounter(room,'hall',now)){room.policePending=false;room.horror.active.patrol=true;}
     if(!room.horror.active&&['door','window','hall','echo'].includes(choice))startEncounter(room,choice,now);
-    else if(choice==='power'&&room.environment.power){room.environment.warning={at:now+12000};log(room,'The ballast is buzzing. The fuse box is outside: check the peephole first.');}
+    else if(choice==='power'&&room.environment.power&&!room.environment.warning&&now>=room.environment.nextOutageAt&&Math.random()<.25){
+      room.environment.warning={at:now+12000};room.environment.nextOutageAt=now+300000;
+      log(room,'The ballast is buzzing. The fuse box is outside: check the peephole first.');
+    }
     else if(choice==='camera'){room.environment.cameraUntil=now+(room.upgrades.includes('camera')?4000:10000);log(room,'Camera signal unstable. Wait for a clear view before dropping.');}
     else if(choice==='hack'){const id=pick(Object.keys(room.players).filter(id=>room.players[id].connected&&room.players[id].computerOpen&&atComputer(room.players[id])&&!room.players[id].hidden));if(id)beginIntrusion(room,id);}
     room.nextEvent=now+Math.max(42000,78000-room.day*4500-(room.loop||0)*3000)+Math.random()*14000;
