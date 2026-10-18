@@ -68,6 +68,8 @@ export class Courtyard{
     for(const [x,z,size] of [[1,6,1.1],[-2,10,1.8],[4,13,1.4],[-6,15,1.9]]){
       const p=new THREE.Mesh(new THREE.CircleGeometry(size,28),material('#74938f',.07,.62));p.rotation.x=-Math.PI/2;p.scale.y=.5;p.position.set(x,-.085,z);p.receiveShadow=true;scene.add(p);
     }
+    box(scene,.6,.12,.3,-5,4.6,20.35,new THREE.MeshBasicMaterial({color:'#ac916a'}));
+    const landingLight=new THREE.PointLight('#c9ae80',36,12,2);landingLight.position.set(-5,4.4,19);scene.add(landingLight);
     this.lights=[];
     for(const [x,z,color] of [[-8,8,'#c4a57b'],[6,15,'#8bbdbb']]){
       box(scene,.12,3.6,.12,x,1.7,z,metal);box(scene,.65,.12,.45,x,3.5,z,new THREE.MeshBasicMaterial({color}));
