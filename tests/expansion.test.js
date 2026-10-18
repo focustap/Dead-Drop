@@ -7,6 +7,12 @@ import {visitorMotion,turnToward} from '../shared/npc.js';
 import {visitor} from '../shared/campaign.js';
 const setup=t=>{let now=Date.now();t.mock.method(Date,'now',()=>now);const r=newRoom();addPlayer(r,'a','A');addPlayer(r,'b','B');gameAction(r,'a','start');r.nextEvent=Infinity;r.horror.recoveryUntil=0;return {r,get now(){return now;},advance(ms){now+=ms;tick(r,now);}};};
 const stand=(r,key,id='a')=>Object.assign(r.players[id],STATIONS[key]);
+test('normal visitor deadlines reject late courier pickups and alley drops',t=>{
+  const c=setup(t),{r}=c;stand(r,'door');r.pending=[{item:'seeds',amount:2,arrives:c.now-1000}];r.door=visitor('courier',c.now-25000,'door');
+  assert.equal(gameAction(r,'a','door:open').ok,false);assert.equal(r.inventory.seeds,0);
+  stand(r,'chute');r.inventory.packages=1;r.alley=visitor('buyer',c.now-29000,'alley');
+  assert.equal(gameAction(r,'a','alley:drop').ok,false);assert.equal(r.inventory.packages,1);assert.equal(r.ledger.deliveries,0);
+});
 test('NPC route headings match approach and departure, with shortest smooth turns',()=>{
   const v=visitor('courier',1000,'door');
   for(const hall of [true,false]){
