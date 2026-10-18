@@ -7,8 +7,10 @@ export class HorrorScene{
     this.windowFigure=character(scene,'#25292d','intruder');scene.add(this.windowFigure);
     this.hallFigure=character(scene,'#181e23','intruder');this.hallFigure.scale.y=1.18;scene.add(this.hallFigure);
     this.scare=character(scene,'#29272b','intruder');this.scare.scale.setScalar(1.7);camera.add(this.scare);scene.add(camera);
+    for(const x of [-.065,.065]){const eye=new THREE.Mesh(new THREE.SphereGeometry(.017,8,6),new THREE.MeshBasicMaterial({color:'#aabbb2'}));eye.position.set(x,1.68,-.258);eye.scale.set(1,.4,.35);this.scare.add(eye);}
     this.scare.position.set(0,-2.7,-.55);this.scare.rotation.y=Math.PI;
     const glow=new THREE.PointLight('#d1e6df',4,3);glow.position.set(0,0,-.3);camera.add(glow);this.glow=glow;
+    this.hallLight=new THREE.PointLight('#b34840',0,8,2);this.hallLight.position.set(7,2.5,-4);scene.add(this.hallLight);
     this.windowFigure.visible=this.hallFigure.visible=this.scare.visible=false;
   }
   update(state,player){this.state=state;this.player=player;}
@@ -16,7 +18,7 @@ export class HorrorScene{
     if(!this.state)return;
     const a=this.state.horror.active,p=this.player,t=now*.001;
     this.windowFigure.visible=!!a&&['window','echo'].includes(a.kind);
-    this.hallFigure.visible=a?.kind==='hall';
+    this.hallFigure.visible=a?.kind==='hall';this.hallLight.intensity=this.hallFigure.visible?5+Math.sin(t*5)*3:0;
     if(this.windowFigure.visible){
       const hunt=a.phase==='hunting'&&a.kind==='window',progress=hunt?Math.min(1,(now-a.attackAt)/2000):0;
       this.windowFigure.position.set(1.8+Math.sin(t)*.12,0,3.68-progress*3);

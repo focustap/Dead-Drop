@@ -65,7 +65,7 @@ export function publicState(room,id){
 export function beginIntrusion(room,id,training=false){
   if(room.intrusions[id] || !room.players[id])return false;
   if(room.horror?.active)return false;
-  if(!training&&(Date.now()<(room.nextHack||0)||room.horror?.active||Object.keys(room.intrusions).length))return false;
+  if(!training&&(Date.now()<(room.nextHack||0)||Date.now()<(room.horror?.recoveryUntil||0)||room.horror?.active||Object.keys(room.intrusions).length))return false;
   if(!training)room.nextHack=Date.now()+90000;
   const sequence=Array.from({length:6+Math.min(3,room.day-1)+Math.floor(Math.random()*2)},()=>pick(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown']));
   room.intrusions[id]={sequence,index:0,expires:Date.now()+(training?30000:9500)+(room.upgrades.includes('firewall')?4000:0),duration:(training?30000:9500)+(room.upgrades.includes('firewall')?4000:0),training};
@@ -106,6 +106,7 @@ function scrape(room,id,target,folder){
 }
 export function terminalCommand(room,id,line){
   const state=room.terminals[id];if(!state)return {text:'Session unavailable.'};
+  const player=room.players[id];if(player?.hidden||player?.zone==='hall'||player?.stunnedUntil>Date.now())return {text:'Return to your workstation when it is safe.'};
   const words=String(line||'').trim().split(/\s+/);const verb=(words[0]||'').toLowerCase();
   const active=state.target&&room.targets[state.target];
   if(room.phase!=='night')return {text:'The shift is closed.'};

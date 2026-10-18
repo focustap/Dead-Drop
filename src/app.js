@@ -13,7 +13,7 @@ let stationOpen=null,site='market',browserHistory=[],summaryKey='',serverOffset=
 let settings={sensitivity:1,volume:.35,quality:'medium'};try{Object.assign(settings,JSON.parse(localStorage.getItem('dead-drop-settings')||'{}'));}catch{}
 const gameNow=()=>Date.now()+serverOffset;
 let state=null,local=null,self=null,socket=null,remote=false,tab='terminal',panelOpen=false,guideOpen=false,viewOpen=null,active=false,toastTimeout=null;
-let termHistory=[{cmd:'',text:'DEAD DROP TERMINAL v0.2\nSYSTEM READY. Enter "help" to list commands.'}],scanBusy=false,nearby=null,lastIntrusion=false;
+let termHistory=[{cmd:'',text:'DEAD DROP TERMINAL v0.3\nSYSTEM READY. Enter "help" to list commands.'}],scanBusy=false,nearby=null,lastIntrusion=false;
 let lastStateSignature='',inFlight=false,marketCode='',marketResult='AWAITING INPUT...',marketSale='';
 const notify=text=>{const e=$('toast');e.textContent=text;e.classList.add('show');clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>e.classList.remove('show'),4000);};
 function rawState(){
@@ -297,7 +297,7 @@ window.__deadDropReady = true;
 setInterval(()=>{
   if(!active)return;
   if(local){tick(local);rawState();}
-  renderIntrusion();renderChallenge();if(remote)updateHud();if($('remoteClock'))$('remoteClock').textContent=Math.ceil(Math.max(0,(state.remoteSession?.expires||gameNow())-gameNow())/1000)+'s LEASE';
+  renderIntrusion();renderChallenge();if(remote)updateHud();if($('remoteClock'))$('remoteClock').textContent=Math.ceil(Math.max(0,(state.remoteSession?.expires||gameNow())-gameNow())/1000)+'s '+(state.horror.active||!state.environment.power?'PAUSED':'LEASE');
 },180);
 
 $('closeStation').onclick=closeStation;

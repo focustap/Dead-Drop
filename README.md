@@ -31,9 +31,9 @@ disconnect
 training
 ```
 
-Read files and dispatches, recover REC codes, verify them and sell the useful fragments. Decoys pay nothing, and a record can be sold only once by the whole crew. Targets and contracts replenish every 40 seconds. Later nights introduce higher-value archives and hidden cache folders; tier 3 requires the decoder upgrade. Repeated scans attract arrow/WASD intrusions. Later nights lengthen their sequences; a firewall gives four extra seconds and a vault reduces losses.
+Read files and dispatches, recover REC codes, verify them and sell the useful fragments. Decoys pay nothing, and a record can be sold only once by the whole crew. Targets and contracts replenish every 40 seconds. Later nights introduce higher-value archives and hidden cache folders; tier 3 requires the decoder upgrade. Scraping has an eight-second cooldown; the first probe recovers its folder reliably, while later probes have a 55% recovery chance. Record prices are lower ($85/$115/$185 base). A rare probe can attract an arrow/WASD intrusion; ambient hacks have a shared 90-second cooldown and wait during physical encounters. Later nights lengthen their sequences; a firewall gives four extra seconds and a vault reduces losses.
 
-**Browser** has an address bar, history, bookmarks and six distinct local websites:
+**Browser** has an address bar, history, bookmarks and seven distinct local websites:
 
 | Website | Function |
 | --- | --- |
@@ -43,6 +43,7 @@ Read files and dispatches, recover REC codes, verify them and sell the useful fr
 | relay.onion | Buy permanent security and production upgrades |
 | hush.onion | Read dispatches and send messages to the crew |
 | signal.onion | Learn visitor behavior, electrical warnings and archive hints |
+| threats.onion | Operator field notes covering every threat, warning, counter and consequence |
 
 These addresses are internal routes. All targets and records are generated game data; no external networks or personal financial records are accessed.
 
@@ -59,17 +60,39 @@ The tent, plants, packages, carried harvest and player movements are visible to 
 ### Threats and observation
 
 - Wallet intrusions use arrows or WASD. A wrong key or expired timer loses a bounded percentage of the wallet.
-- Empty-handed visitors lean toward the lock. Opening for one loses cash and trips the breaker; setting the chain sends them away.
-- A buzzing ballast gives twelve seconds to reset the fuse box beside the door. An outage stops computer work and plant growth until repaired.
+- Empty-handed visitors test the lock. An unlocked door breaches after ten seconds of waiting; locking or setting the chain prevents it. Deliberately opening for one also triggers a scare, loss and damaged breaker.
+- A buzzing ballast gives twelve seconds to visit the hallway fuse box opposite apartment 204. Use the peephole, unlock the bolt, and select ENTER HALLWAY. Walk to the fuse box and press E. Return to door 204 and press E; it locks behind you. Waiting for a hallway threat to leave is safe: the outage has no repair deadline. An outage stops computer work and plant growth until repaired.
 - Camera interference clears after ten seconds, or four with shielded wiring. Wait for a clear view before dropping goods.
-- Heat and later nights shorten the interval between incidents.
+- Later nights shorten encounter spacing, from roughly 74–88 seconds to 51–65 seconds, with at least 30 seconds of recovery after a major encounter. Window and hallway threats join the pool from night two. Harmless bangs and passing window shadows provide uncertainty between attacks.
 
 The hallway extends past multiple numbered apartments, with approach/leave animations, fixtures and a distorted circular peephole. The wall monitor and fullscreen CCTV share one live render target. No UI marks visitors GOOD or BAD; observation text describes visible behavior.
+
+### Surviving the new encounters
+
+**The Glass Walker** taps the rear window, then enters after twelve seconds regardless of the door lock. Use **E** at the wardrobe beside the packing table. Stay hidden throughout the ten-second search; **E**, Escape, or LEAVE WARDROBE exits. All four operators fit. Each operator must hide independently (or remain outside in the hallway). Leaving early exposes that operator again.
+
+**The Tenant** approaches with heavy footsteps and a red hallway light. Check the peephole and wait inside through its ten-second patrol. Operators already in the hallway have twelve seconds to return to door 204. Being caught forces the operator inside. The corridor retains its existing architecture; entering and returning use the physical door interaction rather than opening free movement through walls.
+
+Caught operators see a close-up figure, hear a distinctive sting, lose carried harvest, and need six seconds to recover. A major encounter charges the shared wallet **once**, capped at $240; it does not multiply the charge per player. New arrivals during an encounter get twelve seconds of protection. Hiding and remote sessions survive the existing authenticated reconnection lease. The lock is shared, and the server validates positions, zones, hiding, deadlines and payouts. Actual major encounters and digital intrusions never overlap. The rain continues underneath sparse taps, footsteps and distant impacts; all sounds obey Volume.
+
+### Remote computers and evidence work
+
+Visit **wire.onion → LATTICE / DIRECT CONNECTIONS → MOUNT**. The **REMOTE** application provides the circuit, folders, file list and document viewer. These `lattice://` addresses are invented internal game routes; no external computer is contacted.
+
+1. Link the voltage relays from lowest to highest. Three mistakes across the whole job burn the target; disconnecting does not erase its trace.
+2. Read `brief/read-first.txt`, then inspect the mail, logs and vault folders.
+3. **Rotated archive:** decode an alphabet-rotation seal using a separate key memo, submit it and extract the payload.
+4. **Counterfeit handoff:** cross-check the sender and batch across documents, then extract the one matching manifest. Lookalike manifests contain invalid evidence.
+5. **Three-hop dead signal:** reconstruct a chronological route from three logs and a dispatch, submit it and extract the bundle before the shorter lease expires.
+6. Sell extracted evidence under **LOCAL EVIDENCE** on **ledger.onion** or the existing RECORDS tab. The whole crew can settle an extraction, but only once. Payouts ($240–$370) count toward contract income and campaign quotas.
+
+Remote leases run for 150 seconds (95 for timed routes); physical encounters and power outages pause them. Leave the computer with Escape to handle danger, then resume through REMOTE. Memory and carrier contracts remain available and can be abandoned with their new button. Contacts replenish with the existing archive cycle; tiers unlock by night, and tier three requires the decoder. The server keeps puzzle solutions and other players' file sessions out of public state.
 
 ## Architecture and deployment
 
 - `shared/core.js`: authoritative actions, generated targets, contracts, visitors and simulation ticks.
 - `shared/campaign.js`: campaign rules, economy, catalog and visitor phases.
+- `shared/horror.js`, `shared/remote.js`, `shared/npc.js`: coordinated encounters, remote jobs, and direction-aware visitor routes.
 - `shared/layout.js`: furniture collision and station interaction positions, shared by client and server.
 - `server/index.js`: Express/Socket.IO rooms, rate limits, authoritative movement and reconnect leases.
 - `src/app.js`, `src/browser.js`: OS, station UI, browser routes, HUD and input.
@@ -96,8 +119,8 @@ npm start
 
 Open `http://localhost:3000/`. On Linux CI, install Chromium with `npx playwright install --with-deps chromium`.
 
-Mechanics tests cover the campaign's win/loss conditions, economy, growing, resource ownership, collision, power counterplay, contract timing and four-client reconnection. Browser tests cover the original terminal flows, websites, memory contracts, shared rooms, campaign summaries, startup failures and a complete co-op physical production/delivery route. The physical browser fixture advances visitor travel and crop maturity; the unit tests separately advance the actual growth simulation. Screenshots are written to `test-results/` for visual review.
+Mechanics tests cover the campaign's win/loss conditions, economy, growing, resource ownership, collision, power counterplay, contract timing and four-client reconnection. Mechanics/socket tests also cover per-player hiding, shared breach penalties, threat exclusion/recovery, circuit mistakes, evidence ownership, secret-state boundaries and remote reconnection. Browser tests cover the original terminal flows, websites, memory contracts, shared rooms, campaign summaries, startup failures a remote archive solved by reading its documents and selling its evidence, an on-screen window scare, and a complete co-op physical production/delivery route including the hallway breaker and wardrobe. The physical browser fixture advances visitor travel and crop maturity; the unit tests separately advance the actual growth simulation. Screenshots are written to `test-results/` for visual review.
 
 ## Remaining polish
 
-The integrated loop is implemented. Further art and balance work remains: richer clothing meshes and hand animations, more varied procedural documents and contract types, spatial/recorded ambient audio, and broad hardware/browser performance testing. Wet surfaces use inexpensive specular shading rather than planar reflections. Persistent saves and recovery across backend restarts are not included. Touch/gamepad controls are not implemented. Playtesting with a full crew is still needed to tune the 24-minute economy beyond automated coverage.
+The integrated loop is implemented. Further art and balance work remains: richer clothing meshes and hand animations, further procedural document and puzzle variety, spatial/recorded ambient audio, and broad hardware/browser performance testing. Wet surfaces use inexpensive specular shading rather than planar reflections. Persistent saves and recovery across backend restarts are not included. Touch/gamepad controls are not implemented. Playtesting with a full crew is still needed to tune the 24-minute economy beyond automated coverage.

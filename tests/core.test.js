@@ -146,7 +146,7 @@ test('carrier intercept uses server time and accepts only the timing window',t=>
 test('power warning can be countered and public state keeps personal sessions private',()=>{
   const r=roomWithPlayer();addPlayer(r,'p2','Peer');terminalCommand(r,'p1','connect NOVA-17');
   r.environment.warning={at:Date.now()+1000};stand(r,'breaker');gameAction(r,'p1','breaker:reset');tick(r,Date.now()+1500);assert.equal(r.environment.power,true);
-  r.environment.warning={at:1};tick(r);assert.equal(r.environment.power,false);assert.match(terminalCommand(r,'p1','ls').text,/NO POWER/);
+  r.environment.warning={at:1};tick(r);assert.equal(r.environment.power,false);stand(r,'door');assert.match(terminalCommand(r,'p1','ls').text,/NO POWER/);
   const state=publicState(r,'p2');assert.equal(state.terminal.target,null);assert.equal(state.records,undefined);assert.equal(state.challenges,undefined);
 });
 test('unknown inherited listings cannot corrupt the shared wallet',()=>{

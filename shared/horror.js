@@ -27,6 +27,7 @@ function catchPlayers(r,event,players,now){
   const fresh=players.filter(p=>p.connected&&!(p.safeUntil>now)&&!event.caught.includes(p.id));if(!fresh.length)return;
   if(!event.charged){spend(r,Math.min(240,Math.ceil(r.bank*.22)+35),true);r.heat=Math.min(100,r.heat+12);event.charged=true;}
   for(const p of fresh){event.caught.push(p.id);p.scare={id:event.id,kind:event.kind,until:now+2200};p.stunnedUntil=now+6000;p.carrying=0;p.hidden=false;
+    const challenge=r.challenges[p.id];if(challenge){const job=r.contracts.find(j=>j.id===challenge.id);if(job){job.owner=null;job.expires=now;}delete r.challenges[p.id];}
     if(p.zone==='hall'){Object.assign(p,{zone:'apartment',x:3.8,z:-1.45,lastMove:now});}
   }
 }

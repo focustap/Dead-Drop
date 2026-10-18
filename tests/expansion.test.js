@@ -26,7 +26,8 @@ test('locked door prevents timed breach; unlocked breach charges the crew only o
 test('window ignores the lock, hiding protects each player for the full hunt',t=>{
   const c=setup(t),{r}=c;startEncounter(r,'window',c.now);stand(r,'hide');assert.equal(gameAction(r,'a','hide:enter').ok,true);r.players.b.carrying=3;
   const before={...r.players.a};movePlayer(r,'a',{x:0,z:0,yaw:1},c.now+1000);assert.equal(r.players.a.x,before.x);
-  c.advance(12100);assert.equal(r.players.a.scare,undefined);assert.ok(r.players.b.scare);assert.equal(r.players.b.carrying,0);
+  gameAction(r,'b','contract:start',{id:r.contracts[0].id});
+  c.advance(12100);assert.equal(r.challenges.b,undefined);assert.equal(r.players.a.scare,undefined);assert.ok(r.players.b.scare);assert.equal(r.players.b.carrying,0);
   c.advance(9000);assert.equal(r.horror.active.kind,'window');c.advance(1000);assert.equal(r.horror.active,null);assert.equal(gameAction(r,'a','hide:leave').ok,true);
   assert.equal(startEncounter(r,'hall',c.now),false);
 });
@@ -55,7 +56,7 @@ test('remote archive requires circuit, documents, decoded seal, extraction and o
   assert.equal(gameAction(r,'a','remote:start',{id:target.id}).ok,false);
 });
 test('investigation decoys add trace, correct evidence pays; solution data stays server-side',t=>{
-  const {r}=setup(t),target=connect(r,'investigation');gameAction(r,'a','remote:folder',{folder:'vault'});gameAction(r,'a','remote:read',{file:'manifest-copy.dat'});assert.equal(gameAction(r,'a','remote:extract').ok,false);
+  const {r}=setup(t),target=connect(r,'investigation');gameAction(r,'a','remote:folder',{folder:'vault'});gameAction(r,'a','remote:read',{file:Object.keys(target.files.vault).find(f=>'vault/'+f!==target.valuable)});assert.equal(gameAction(r,'a','remote:extract').ok,false);
   gameAction(r,'a','remote:read',{file:target.valuable.split('/')[1]});assert.equal(gameAction(r,'a','remote:extract').ok,true);
   const state=publicState(r,'b');assert.equal(state.remoteTargets,undefined);assert.equal(state.remoteSessions,undefined);assert.equal(state.remoteSession,null);assert.ok(!JSON.stringify(state.remoteListings).includes(target.solution));
 });

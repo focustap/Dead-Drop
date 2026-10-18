@@ -16,11 +16,12 @@ export function seedRemote(r,now){
       files.mail['key-memo.txt']='Archive seal uses alphabet rotation +'+shift+'. Move every encoded letter BACK '+shift+' places. A wraps around to Z.';
       files.logs['seal.txt']='ENCODED SEAL: '+cipher;files.vault['payload.arc']='Encrypted recovery payload. Unlock using the decoded seal.';files.vault['preview.arc']='Zero-filled preview. No recoverable content.';
     }else if(type==='investigation'){
-      solution=word+'-'+batch;valuable='vault/manifest-'+batch+'.dat';files.mail['dispatch.txt']='Authorised sender: '+word+'. Ignore lookalike senders.';
+      const names=['manifest-A.dat','manifest-B.dat','manifest-C.dat'].sort(()=>Math.random()-.5);
+      solution=word+'-'+batch;valuable='vault/'+names[0];files.mail['dispatch.txt']='Authorised sender: '+word+'. Ignore lookalike senders.';
       files.logs['audit.txt']='Accepted batch: '+batch+'. Cross-check the sender before extracting.';
-      files.vault['manifest-'+batch+'.dat']='SIGNED BY '+word+' / BATCH '+batch+' / ORIGINAL HANDOFF';
-      files.vault['manifest-old.dat']='SIGNED BY '+word+' / BATCH 000 / SUPERSEDED';
-      files.vault['manifest-copy.dat']='SIGNED BY MIRROR / BATCH '+batch+' / UNVERIFIED COPY';
+      files.vault[names[0]]='SIGNED BY '+word+' / BATCH '+batch+' / ORIGINAL HANDOFF';
+      files.vault[names[1]]='SIGNED BY '+word+' / BATCH 000 / SUPERSEDED';
+      files.vault[names[2]]='SIGNED BY MIRROR / BATCH '+batch+' / UNVERIFIED COPY';
     }else{
       const digits=Array.from({length:3},()=>String(1+Math.floor(Math.random()*8)));solution=digits.join('');valuable='vault/route.bundle';
       files.mail['dispatch.txt']='Chronological relay order: ROWAN, BRASS, ASH. Concatenate their route digits; never sort numerically.';
@@ -33,7 +34,7 @@ export function seedRemote(r,now){
 export function remotePublic(r,id){
   const s=r.remoteSessions[id],t=s&&r.remoteTargets[s.target];
   return {remoteListings:Object.values(r.remoteTargets).map(({id,address,type,tier,title,payout,owner,completed,burned})=>({id,address,type,tier,title,payout,owner,completed,burned})),
-    remoteSession:s&&t?{target:t.id,address:t.address,title:t.title,type:t.type,stage:s.stage,expires:s.expires,ports:s.ports,routeIndex:s.routeIndex,cwd:s.cwd,
+    remoteSession:s&&t?{target:t.id,address:t.address,title:t.title,type:t.type,stage:s.stage,expires:s.expires,ports:s.ports,connected:s.route.slice(0,s.routeIndex),routeIndex:s.routeIndex,cwd:s.cwd,
       folders:Object.keys(t.files),files:Object.keys(t.files[s.cwd]||{}),selected:s.selected,document:s.document,solved:s.solved,strikes:t.strikes}:null,
     extracted:Object.values(r.extractions).map(({id,title,payout,sold,from})=>({id,title,payout,sold,from}))};
 }
@@ -59,6 +60,7 @@ export function remoteAction(r,id,action,payload,now){
   if(now>=s.expires){t.owner=null;t.burned=true;delete r.remoteSessions[id];return fail('Remote lease expired.');}
   if(action==='remote:route'){
     if(s.stage!=='handshake')return fail('Circuit already connected.');
+    if(s.route.slice(0,s.routeIndex).includes(String(payload.port)))return {ok:true,text:'Relay already linked.'};
     if(String(payload.port)!==s.route[s.routeIndex])return strike(r,s,t,'Wrong voltage.');
     if(++s.routeIndex===s.route.length)s.stage='files';return {ok:true,text:s.stage==='files'?'Remote filesystem mounted.':'Relay accepted.'};
   }
