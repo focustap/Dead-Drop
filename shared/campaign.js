@@ -68,7 +68,7 @@ export function nextNight(r,now){
   r.contracts=[];r.nextContract={economic:0,delivery:0};r.orders=[];r.sales={buyers:[],deals:[],listed:0,next:0};r.remoteSessions={};r.remoteTargets={};
   if(r.day%3===1){r.cycleEarned=0;r.cycleRequired=r.quota;}
   r.nightEnds=now+NIGHT_MS;r.lastTick=now;r.nextTarget=now+10000;r.nextEvent=now+35000;
-  r.heat=Math.max(4,r.heat-18);r.environment={power:true,warning:null,cameraUntil:0};
+  r.heat=Math.max(4,r.heat-18);r.environment={power:true,warning:null,cameraUntil:0,nextOutageAt:now+150000};
   r.door={visitor:'empty',next:now+12000};r.alley={visitor:'empty',next:now+9000};
 }
 

@@ -25,9 +25,11 @@ test('NPC route headings match approach and departure, with shortest smooth turn
   assert.ok(turnToward(0,Math.PI,.016)>0&&turnToward(0,Math.PI,.016)<Math.PI);
   assert.ok(Math.abs(turnToward(3.13,-3.13,.02)-3.13)<.01);
 });
-test('locked door prevents timed breach; unlocked breach charges the crew only once',t=>{
-  const c=setup(t),{r}=c;assert.equal(startEncounter(r,'door',c.now),true);c.advance(17000);assert.equal(r.bank,185);assert.equal(r.players.a.scare,undefined);
-  stand(r,'door');gameAction(r,'a','door:unlock');c.advance(250);assert.ok(r.players.a.scare);assert.ok(r.players.b.scare);const bank=r.bank;assert.ok(bank<185);c.advance(500);assert.equal(r.bank,bank);assert.equal(r.horror.locked,true);
+test('ignored door threat ends the run after a synced fatal scare, even with resting bolt',t=>{
+  const c=setup(t),{r}=c;assert.equal(r.horror.locked,true);assert.equal(startEncounter(r,'door',c.now),true);
+  c.advance(17000);assert.equal(r.phase,'breach');assert.equal(r.players.a.scare.kind,'door');assert.equal(r.players.b.scare.kind,'door');
+  c.advance(2800);assert.equal(r.phase,'lost');assert.match(r.reason,/Locksmith/);assert.equal(r.summary.day,1);
+  c.advance(4000);assert.equal(r.phase,'lost');
 });
 test('window ignores the lock, hiding protects each player for the full hunt',t=>{
   const c=setup(t),{r}=c;startEncounter(r,'window',c.now);stand(r,'hide');assert.equal(gameAction(r,'a','hide:enter').ok,true);r.players.b.carrying=3;
@@ -76,8 +78,13 @@ test('remote lease pauses for physical danger and power loss, but expires during
   const c=setup(t),{r}=c;connect(r,'trace');const original=r.remoteSessions.a.expires;startEncounter(r,'echo',c.now);c.advance(4000);assert.equal(r.remoteSessions.a.expires,original+4000);
   r.horror.active=null;r.environment.power=false;c.advance(10000);assert.equal(r.remoteSessions.a.expires,original+14000);r.environment.power=true;c.advance(100000);assert.equal(r.remoteSessions.a,undefined);
 });
-test('inherited remote ids cannot corrupt money, and scrape cooldown prevents spam',t=>{
-  const {r}=setup(t);for(const id of ['__proto__','constructor','toString'])for(const action of ['remote:start','remote:sell'])assert.equal(gameAction(r,'a',action,{id}).ok,false);
-  assert.equal(r.bank,185);terminalCommand(r,'a','connect NOVA-17');terminalCommand(r,'a','scrape finances');assert.match(terminalCommand(r,'a','scrape backups').text,/cooling/);assert.equal(r.scans,1);
+test('inherited remote ids cannot corrupt money, and scraping has a single timed operation without cooldown',t=>{
+  const c=setup(t),{r}=c;for(const id of ['__proto__','constructor','toString'])for(const action of ['remote:start','remote:sell'])assert.equal(gameAction(r,'a',action,{id}).ok,false);
+  assert.equal(r.bank,185);assert.equal(gameAction(r,'a','computer:enter').ok,true);
+  terminalCommand(r,'a','connect NOVA-17');const first=terminalCommand(r,'a','scrape finances');
+  assert.ok(first.scanId);assert.match(terminalCommand(r,'a','scrape backups').text,/SCAN IN PROGRESS/);assert.equal(r.scans,0);
+  c.advance(10000);assert.equal(r.scans,1);
+  const next=terminalCommand(r,'a','scrape backups');
+  assert.ok(next.scanId);assert.notEqual(next.scanId,first.scanId);
   assert.equal(THREATS.length,12);
 });

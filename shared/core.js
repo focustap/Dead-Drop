@@ -41,7 +41,7 @@ export function newRoom(code='LOCAL'){
     targets,records,remoteTargets:{},remoteSessions:{},extractions:{},scans:0,targetSerial:4,ledger:ledger(),cycleEarned:0,cycleRequired:QUOTAS[0],settlements:{},collector:null,curtains:null,history:[],summary:null,
     inventory:{seeds:0,soil:2,buds:0,wrap:2,packages:0},garden:{soil:false,planted:false,moisture:0,growth:0,light:true},
     pending:[],orders:[],contracts:[],messages:[],alley:{visitor:'empty',next:now+14000},door:{visitor:'empty',next:now+23000},nightEnds:now+NIGHT_MS,
-    horror:newHorror(now),nextHack:now+75000,environment:{power:true,warning:null,cameraUntil:0},lastTick:now,nextTarget:now+40000,nextEvent:now+45000,
+    horror:newHorror(now),nextHack:now+75000,environment:{power:true,warning:null,cameraUntil:0,nextOutageAt:now+160000},lastTick:now,nextTarget:now+40000,nextEvent:now+45000,
     log:[{id:uid(),time:now,text:'Night one. Recover records, grow inventory, make the deadline.'}]};
 }
 export function addPlayer(room,id,name){
@@ -88,6 +88,7 @@ function loseIntrusion(room,id){
 export function endComputer(room,id){
   const p=room.players[id];if(!p)return;
   p.computerOpen=false;
+  cancelScrape(room.terminals[id]);
   if(room.intrusions[id]?.training)delete room.intrusions[id];
   else if(room.intrusions[id])loseIntrusion(room,id);
 }
@@ -102,19 +103,40 @@ export function intrusionInput(room,id,key){
   return {ok:true,text:'Blocked '+a.index+'/'+a.sequence.length};
 }
 const dirNames=t=>Object.keys(t.folders);
+const SCRAPE_MS=10000;
+function cancelScrape(state,why='SCRAPE INTERRUPTED — reconnect and try again.'){
+  if(!state?.scan)return;
+  state.lastScan={...state.scan,text:why,completedAt:Date.now()};
+  state.scan=null;
+}
 function scrape(room,id,target,folder){
-  const contents=target.folders[folder];
-  if(!contents)return 'Folder not found.';
   const state=room.terminals[id],now=Date.now();
-  if(now<(state.nextScan||0))return 'Probe cooling down. Read documents while the scanner clears.';
-  state.nextScan=now+8000;room.scans++;
-  const found=Object.keys(room.records).filter(code=>room.records[code].target===target.name&&room.records[code].folder===folder);
-  const recovered=room.scans===1||Math.random()<.55?found:[];
-  for(const code of recovered)room.records[code].discovered=true;
-  const decoys=folder==='photos'?[]:['REF-'+Math.floor(10000+Math.random()*89000),'INV-'+Math.floor(1000+Math.random()*8500)];
-  room.heat=clamp(room.heat+target.tier,0,100);
-  if(room.scans%10===0&&Math.random()<.3)beginIntrusion(room,id);
-  return 'Scanning '+target.name+':/'+folder+' ...\n'+(recovered.length+decoys.length?[...recovered,...decoys].map((c,i)=>'['+(i+1)+'] '+c).join('\n'):'No notable records found.')+'\nCheck possible records in BLACK MARKET.';
+  if(state.scan)return 'SCAN IN PROGRESS — '+Math.max(1,Math.ceil((state.scan.finishesAt-now)/1000))+'s left on '+state.scan.target+':/'+state.scan.folder+'. Only one folder at a time.';
+  if(!target.folders[folder])return 'Folder not found.';
+  if(!room.players[id]?.computerOpen||!atComputer(room.players[id]))return 'Use the workstation to start a scrape.';
+  state.scan={id:uid(),target:target.name,folder,startedAt:now,finishesAt:now+SCRAPE_MS};
+  return 'Scanning '+target.name+':/'+folder+' ...\nPlease wait 10 seconds. Results unlock when this scan finishes.';
+}
+function tickScrapes(room,now){
+  for(const [id,state] of Object.entries(room.terminals)){
+    const scan=state.scan;if(!scan)continue;
+    if(!room.players[id]?.computerOpen||!room.players[id]?.connected||room.intrusions[id]||!room.environment.power){
+      cancelScrape(state,'SCRAPE INTERRUPTED — workstation unavailable. No records recovered.');continue;
+    }
+    if(now<scan.finishesAt)continue;
+    const target=room.targets[scan.target];
+    if(!target?.folders[scan.folder]){cancelScrape(state,'SCRAPE FAILED — target disconnected.');continue;}
+    room.scans++;
+    const found=Object.keys(room.records).filter(code=>room.records[code].target===target.name&&room.records[code].folder===scan.folder);
+    const recovered=room.scans===1||Math.random()<.55?found:[];
+    for(const code of recovered)room.records[code].discovered=true;
+    const decoys=scan.folder==='photos'?[]:['REF-'+Math.floor(10000+Math.random()*89000),'INV-'+Math.floor(1000+Math.random()*8500)];
+    room.heat=clamp(room.heat+target.tier,0,100);
+    const lines=recovered.concat(decoys);
+    state.lastScan={...scan,completedAt:now,text:'Scan complete — '+target.name+':/'+scan.folder+'\n'+(lines.length?lines.map((c,i)=>'['+(i+1)+'] '+c).join('\n'):'No notable records found.')+'\nCheck possible records in BLACK MARKET.'};
+    state.scan=null;
+    if(room.scans%10===0&&Math.random()<.3)beginIntrusion(room,id);
+  }
 }
 export function terminalCommand(room,id,line){
   const state=room.terminals[id];if(!state)return {text:'Session unavailable.'};
@@ -125,7 +147,9 @@ export function terminalCommand(room,id,line){
   if(!room.environment.power)return {text:'NO POWER. Reset the breaker in the hallway.'};
   if(room.intrusions[id])return {text:'SYSTEM LOCKED — repel the intrusion first.'};
   let output='';
-  if(verb==='help')output='AVAILABLE: help, targets, connect NAME, ls, pwd, cd NAME, cd .., cat FILE, scrape [FOLDER], cd scrape FOLDER, disconnect, training\nAll recovered records are local to this session.';
+  const beforeScan=state.scan?.id;
+  if(state.scan&&['connect','disconnect'].includes(verb))output='SCAN IN PROGRESS — finish the current folder before changing targets.';
+  else if(verb==='help')output='AVAILABLE: help, targets, connect NAME, ls, pwd, cd NAME, cd .., cat FILE, scrape [FOLDER], cd scrape FOLDER, disconnect, training\nAll recovered records are local to this session.';
   else if(verb==='targets')output=Object.values(room.targets).map(x=>'● '+x.name+' · TIER '+x.tier+' · '+x.job).join('\n');
   else if(verb==='connect'){
     const name=(words[1]||'').toUpperCase();
@@ -157,7 +181,7 @@ export function terminalCommand(room,id,line){
   }
   else output='Unknown command. Use "help".';
   state.seen=[...state.seen,String(line||'')].slice(-20);
-  return {text:output,target:state.target,cwd:state.cwd,delay:verb==='scrape'||(verb==='cd'&&words[1]==='scrape')?1100:350};
+  return {text:output,target:state.target,cwd:state.cwd,scanId:state.scan?.id!==beforeScan?state.scan?.id:null,delay:verb==='scrape'||(verb==='cd'&&words[1]==='scrape')?0:350};
 }
 const fail=text=>({ok:false,text});
 export function gameAction(room,id,action,payload={}){
@@ -251,7 +275,7 @@ export function gameAction(room,id,action,payload={}){
     room.door.leaveAt=now;room.door.next=now+6000;
   }else if(action==='door:brace'){
     room.horror.locked=true;
-    if(room.horror.active?.kind==='door'){room.horror.active=null;room.horror.recoveryUntil=now+30000;}
+    if(room.horror.active?.kind==='door'){room.horror.active.braced=true;room.horror.active=null;room.horror.recoveryUntil=now+30000;}
     if(room.door.visitor==='empty')return fail('The door is already secure.');
     room.door.leaveAt=now;room.door.next=now+6000;room.heat=Math.max(0,room.heat-3);message='Chain secured. The footsteps retreat.';
   }else if(action==='breaker:reset'){
@@ -264,14 +288,31 @@ function replenish(room,now){
   seedRemote(room,now);
   seedSales(room,now);seedContracts(room,now);
 }
+export function schedulePowerOutage(room,now=Date.now(),roll=Math.random()){
+  const env=room.environment;
+  if(!env.power||env.warning||now<(env.nextOutageAt||0)||roll>=.25)return false;
+  env.warning={at:now+12000};env.nextOutageAt=now+300000;
+  log(room,'The ballast is buzzing. The fuse box is outside: check the peephole first.');
+  return true;
+}
 export function tick(room,now=Date.now()){
   if(room.phase==='collector')return tickCollector(room,now);
+  if(room.phase==='breach'){
+    if(now>=room.breach.ends){room.phase='lost';room.horror.active=null;
+      const gross=income(room);room.summary={day:room.day,...room.ledger,gross,net:gross-room.ledger.expenses-room.ledger.losses,quota:room.quota,quotaPaid:0,cycleEnd:false,bank:room.bank,nightsRemaining:nightsRemaining(room.day)};
+    }
+    return true;
+  }
   if(room.phase==='ending'){const result=tickEnding(room,now);if(room.phase==='night')replenish(room,now);return result;}
   if(room.phase!=='night')return false;
-  if(now>=room.nightEnds){finishNight(room,room.nightEnds);return true;}
+  if(now>=room.nightEnds){
+    for(const terminal of Object.values(room.terminals))cancelScrape(terminal,'SCRAPE INTERRUPTED — dawn arrived before completion.');
+    finishNight(room,room.nightEnds);return true;
+  }
   const elapsed=Math.max(0,now-room.lastTick),dt=Math.min(elapsed,2000)/1000;room.lastTick=now;
   tickRemote(room,now,elapsed);
   tickHorror(room,now);
+  tickScrapes(room,now);
   tickExchange(room,now);tickContracts(room,now,elapsed);tickSales(room,now,elapsed);
   const g=room.garden;
   if(g.planted){
@@ -298,13 +339,17 @@ export function tick(room,now=Date.now()){
     room.targets[name]=makeTarget(name,Math.min(i,room.day*4-1),room.records);
     room.nextTarget=now+40000;replenish(room,now);log(room,'Fresh archives and contracts arrived on the network.');
   }
-  if(room.environment.warning&&now>=room.environment.warning.at){room.environment.power=false;room.environment.warning=null;log(room,'POWER LOST. Reset the breaker in the hallway.');}
+  if(room.environment.warning&&now>=room.environment.warning.at){
+    room.environment.power=false;room.environment.warning=null;
+    for(const terminal of Object.values(room.terminals))cancelScrape(terminal,'SCRAPE INTERRUPTED — power lost before completion.');
+    log(room,'POWER LOST. Reset the breaker in the hallway.');
+  }
   if(now>=room.nextEvent&&!room.horror.active&&now>=room.horror.recoveryUntil&&!Object.keys(room.intrusions).length){
     const options=room.day===1?['door','echo','power','camera','hack']:['door','window','hall','echo','power','camera','hack'];
     const choice=room.policePending?'hall':pick(options);
     if(room.policePending&&startEncounter(room,'hall',now)){room.policePending=false;room.horror.active.patrol=true;}
     if(!room.horror.active&&['door','window','hall','echo'].includes(choice))startEncounter(room,choice,now);
-    else if(choice==='power'&&room.environment.power){room.environment.warning={at:now+12000};log(room,'The ballast is buzzing. The fuse box is outside: check the peephole first.');}
+    else if(choice==='power')schedulePowerOutage(room,now);
     else if(choice==='camera'){room.environment.cameraUntil=now+(room.upgrades.includes('camera')?4000:10000);log(room,'Camera signal unstable. Wait for a clear view before dropping.');}
     else if(choice==='hack'){const id=pick(Object.keys(room.players).filter(id=>room.players[id].connected&&room.players[id].computerOpen&&atComputer(room.players[id])&&!room.players[id].hidden));if(id)beginIntrusion(room,id);}
     room.nextEvent=now+Math.max(42000,78000-room.day*4500-(room.loop||0)*3000)+Math.random()*14000;
