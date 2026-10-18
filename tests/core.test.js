@@ -16,7 +16,7 @@ test('help lists all useful commands, including cd scrape FOLDER',()=>{
 test('terminal can navigate, read files and scrape a directory',()=>{
   const room=roomWithPlayer();
   assert.match(terminalCommand(room,'p1','targets').text,/NOVA-17/);
-  assert.match(terminalCommand(room,'p1','connect NOVA-17').text,/CONNECTED/);
+  assert.match(terminalCommand(room,'p1','connect NOVA-17').text,/CONNECTION ESTABLISHED/);
   assert.match(terminalCommand(room,'p1','ls').text,/finances/);
   assert.match(terminalCommand(room,'p1','cd finances').text,/finances/);
   assert.match(terminalCommand(room,'p1','cat budget.txt').text,/Quarterly budget/);
