@@ -10,7 +10,7 @@ export function createApp(){
   const app=express();app.disable('x-powered-by');
   app.get('/health',(_req,res)=>res.json({ok:true}));
   app.use(express.static(path.join(root,'dist')));
-  const http=createServer(app),io=new Server(http,{maxHttpBufferSize:4096});
+  const http=createServer(app),io=new Server(http,{maxHttpBufferSize:4096,cors:{origin:'*',methods:['GET','POST']}});
   const rooms=new Map(),joined=new Map(),sessions=new Map();
   const emitState=room=>{for(const [sid,entry] of joined){if(entry.code===room.code)io.sockets.sockets.get(sid)?.emit('state',publicState(room,entry.id));}};
   const roomFor=socket=>{const room=rooms.get(joined.get(socket.id)?.code);if(!room)throw Error('Join a room first.');return room;};
@@ -38,23 +38,25 @@ export function createApp(){
         addPlayer(room,socket.id,data.name);register(socket,room,socket.id,ack);
       }catch(error){ackError(ack,error);}
     });
-    socket.on('room:resume',({token}={},ack)=>{
-      try{const session=sessions.get(token),room=rooms.get(session?.code);
+    socket.on('room:resume',(data={},ack)=>{
+      try{const token=data?.token,session=sessions.get(token),room=rooms.get(session?.code);
         if(joined.has(socket.id))throw Error('Already connected.');
         if(!session||!room||session.expires<Date.now()||room.players[session.id]?.connected)throw Error('Session expired. Join the room again.');
         register(socket,room,session.id,ack,token);
       }catch(error){ackError(ack,error);}
     });
-    let lastMove=0,lastAction=0;
+    let lastMove=0,lastAction=Date.now(),actionBudget=12;
     socket.on('player:move',position=>{
       const room=rooms.get(joined.get(socket.id)?.code);
       if(!room||Date.now()-lastMove<55)return;
       lastMove=Date.now();movePlayer(room,joined.get(socket.id).id,position);socket.to(room.code).emit('peers',Object.values(room.players));
     });
-    socket.on('game:action',({event,payload}={},ack)=>{
+    socket.on('game:action',(data={},ack)=>{
       try{
+        const {event,payload}=data||{};
         const room=roomFor(socket),id=joined.get(socket.id).id;let output;
-        if(Date.now()-lastAction<35)throw Error('Slow down.');lastAction=Date.now();
+        const now=Date.now();actionBudget=Math.min(12,actionBudget+(now-lastAction)/50);lastAction=now;
+        if(actionBudget<1)throw Error('Slow down.');actionBudget--;
         if(event==='terminal')output={ok:true,...terminalCommand(room,id,payload?.line)};
         else if(event==='intrusion')output=intrusionInput(room,id,payload?.key);
         else output=gameAction(room,id,event,payload);

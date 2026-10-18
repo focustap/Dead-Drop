@@ -37,6 +37,7 @@ export function finishNight(r,now){
 }
 export function nextNight(r,now){
   r.day++;r.quota=QUOTAS[r.day-1];r.ledger=ledger();r.phase='night';r.summary=null;
+  r.contracts=[];r.orders=[];
   if(r.day%3===1){r.cycleEarned=0;r.cycleRequired=0;}
   r.nightEnds=now+NIGHT_MS;r.lastTick=now;r.nextTarget=now+10000;r.nextEvent=now+35000;
   r.heat=Math.max(4,r.heat-18);r.environment={power:true,warning:null,cameraUntil:0};

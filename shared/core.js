@@ -48,7 +48,7 @@ export function addPlayer(room,id,name){
 export function movePlayer(room,id,p,now=Date.now()){
   const player=room.players[id];if(!player||room.phase!=='night')return;
   if(!Number.isFinite(p?.x)||!Number.isFinite(p?.z)||!Number.isFinite(p?.yaw))return;
-  const max=Math.min(.8,Math.max(.08,(now-player.lastMove)/1000)*4.2);
+  const max=Math.min(.8,Math.max(.015,(now-player.lastMove)/1000)*4.2);
   const distance=Math.hypot(p.x-player.x,p.z-player.z),ratio=distance>max?max/distance:1;
   const resolved=slide(player,{x:player.x+(p.x-player.x)*ratio,z:player.z+(p.z-player.z)*ratio});
   Object.assign(player,resolved,{yaw:p.yaw,lastMove:now});
@@ -61,7 +61,7 @@ export function publicState(room,id){
 }
 function beginIntrusion(room,id,training=false){
   if(room.intrusions[id] || !room.players[id])return false;
-  const sequence=Array.from({length:6+Math.floor(Math.random()*2)},()=>pick(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown']));
+  const sequence=Array.from({length:6+Math.min(3,room.day-1)+Math.floor(Math.random()*2)},()=>pick(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown']));
   room.intrusions[id]={sequence,index:0,expires:Date.now()+(training?30000:9500)+(room.upgrades.includes('firewall')?4000:0),duration:(training?30000:9500)+(room.upgrades.includes('firewall')?4000:0),training};
   log(room,'INTRUSION ALERT: '+room.players[id].name+"'s workstation is under attack!");
   room.heat=clamp(room.heat+3,0,100);return true;
@@ -165,9 +165,14 @@ export function gameAction(room,id,action,payload={}){
     if(r.sold)return fail('ALREADY SOLD — this record has been exhausted.');
     if(action==='market:verify')return {ok:true,text:'VALID '+PRODUCTS[r.kind].name.toUpperCase()+' — $'+r.value+' offer available.'};
     r.sold=true;earn(room,'hacking',r.value);room.heat=clamp(room.heat+3,0,100);message='Sale completed. +$'+r.value+'.';
+  }else if(action==='message:send'){
+    if(!room.environment.power)return fail('The relay is offline.');
+    const text=String(payload.text||'').trim().slice(0,160);if(!text)return fail('Write a message first.');
+    room.messages.unshift({id:uid(),from:p.name,text,time:now});room.messages=room.messages.slice(0,20);
+    return {ok:true,text:'Sent to the crew.'};
   }else if(action==='buy'){
     const item=String(payload.item||''),entry=CATALOG[item];
-    if(!entry)return fail('Unknown listing.');
+    if(!Object.hasOwn(CATALOG,item))return fail('Unknown listing.');
     if(room.bank<entry.price)return fail('Insufficient funds.');
     if(!entry.supply&&room.upgrades.includes(item))return fail('Already installed.');
     if(room.pending.length>=8)return fail('Courier bag full. Collect your supplies first.');
@@ -241,6 +246,7 @@ export function gameAction(room,id,action,payload={}){
     if(c.type==='pulse'||c.index===c.sequence.length){job.completed=true;earn(room,'contracts',job.payout);delete room.challenges[id];message='Contract cleared. +$'+job.payout+'.';}
     else return {ok:true,text:'Packet accepted.'};
   }else return fail('Unknown interaction.');
+  if(station)p.activity={id:uid(),action,until:now+900};
   log(room,message);return {ok:true,text:message};
 }
 function replenish(room,now){
