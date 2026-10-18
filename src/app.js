@@ -314,7 +314,6 @@ function renderHorror(){
   const p=state.players.find(p=>p.id===self),a=state.horror.active,now=gameNow();
   $('toggleBolt').textContent=state.horror.locked?'UNLOCK BOLT':'LOCK BOLT';
   $('enterHall').disabled=state.horror.locked;
-  if(a?.kind==='door'&&a.phase==='warning')$('horrorStatus').textContent='THE HANDLE IS TURNING / BRACE THE DOOR BEFORE IT GETS IN';
   $('hiding').classList.toggle('hidden',!p?.hidden||state.phase!=='night');
   $('hideStatus').textContent=a?.kind==='window'?'KEEP STILL / '+(a.phase==='warning'?'TAPPING AT THE GLASS':Math.ceil(Math.max(0,a.ends-now)/1000)+'s UNTIL FOOTSTEPS FADE'):'QUIET / YOU CAN LEAVE';
   const threatText=a?({door:'LATCH RATTLING / '+(state.horror.locked?'BOLT LOCKED':'BOLT UNLOCKED'),window:a.phase==='retreating'?'THE PROWLER IS LEAVING':a.phase==='warning'?'PROWLER OUTSIDE / HOLD E AT THE CURTAINS':a.phase==='stalking'?'FOOTSTEPS CROSS THE ROOM':'WINDOW BREACHED / FIND COVER',hall:a.phase==='warning'?'HEAVY FOOTSTEPS APPROACHING':'SHADOW IN THE HALLWAY / WAIT INSIDE',echo:'A SOUND FROM THE EMPTY ROOMS'})[a.kind]:'';
