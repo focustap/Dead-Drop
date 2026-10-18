@@ -87,8 +87,8 @@ export class World{
         const speed=this.keys.has('ShiftLeft')||this.keys.has('ShiftRight')?4:2.8;
         let forward=(this.keys.has('KeyW')?1:0)-(this.keys.has('KeyS')?1:0),side=(this.keys.has('KeyD')?1:0)-(this.keys.has('KeyA')?1:0);
         const norm=Math.hypot(forward,side)||1;forward/=norm;side/=norm;
-        const dx=(Math.sin(this.yaw)*forward+Math.cos(this.yaw)*side)*dt*speed;
-        const dz=(-Math.cos(this.yaw)*forward+Math.sin(this.yaw)*side)*dt*speed;
+        const dx=(-Math.sin(this.yaw)*forward+Math.cos(this.yaw)*side)*dt*speed;
+        const dz=(-Math.cos(this.yaw)*forward-Math.sin(this.yaw)*side)*dt*speed;
         this.pos.x=Math.min(4.25,Math.max(-4.25,this.pos.x+dx));this.pos.z=Math.min(3.30,Math.max(-3.30,this.pos.z+dz));
         if((dx||dz)&&performance.now()-this.lastMove>75){this.lastMove=performance.now();this.callbacks.onMove?.({x:this.pos.x,z:this.pos.z,yaw:this.yaw});}
       }
