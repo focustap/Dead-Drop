@@ -1,3 +1,5 @@
+import {slide,atStation} from './layout.js';
+import {NIGHT_MS,QUOTAS,CATALOG,ledger,earn,spend,income,visitor,phase,clue,finishNight,nextNight} from './campaign.js';
 // Dead Drop's complete simulated game state. No real networks, accounts, or personal data.
 const PRODUCTS = Object.freeze({
   CARD:{name:'Payment record',base:105}, ID:{name:'Identity record',base:140},
@@ -21,37 +23,46 @@ function makeTarget(name,i,registry){
     folders[folder][file]=(folders[folder][file]||'')+' Fragment '+code+'; checksum '+(84321+i*73+j*27);
     registry[code]={kind,value:PRODUCTS[kind].base+(kind==='JUNK'?0:i*24),target:name,folder,discovered:false,sold:false};
   }
-  return {name,folders};
+  const tier=1+Math.min(2,Math.floor(i/4));
+  folders.documents['dispatch.txt']='The receiver checks a phone beside the red tray. A courier carries a taped parcel and waits after two knocks. Never trust an empty-handed visitor at the lock.';
+  folders.backups['route.txt']='Archive route /backups. A recovery fragment can fund your next shipment.';
+  if(i>=4)folders['.cache']={'dispatch.log':'Hidden recovery mirror. Scrape backups for the original record.', 'checksum.key':'Checksum '+(i*73+84321)};
+  return {name,folders,tier,job:['Archive recovery','Wallet reconstruction','Identity audit'][i%3]};
 }
 export function newRoom(code='LOCAL'){
   const records={},targets=Object.fromEntries(TARGET_NAMES.map((n,i)=>[n,makeTarget(n,i,records)]));
   const now=Date.now();
-  return {code,created:now,started:false,day:1,quota:650,bank:185,protected:0,heat:4,upgrades:[],players:{},terminals:{},intrusions:{},
-    targets,records,scans:0,inventory:{seeds:0,plants:0,buds:0,wrap:2,packages:0,readyAt:0},
-    pending:[],orders:[],alley:{visitor:'empty',next:now+14000},door:{visitor:'empty',next:now+23000},nightEnds:now+6*60000,
-    log:[{id:uid(),time:now,text:'Hideout online. Your contacts are waiting. Visit a computer to begin.'}]};
+  return {code,created:now,started:false,phase:'lobby',day:1,quota:QUOTAS[0],bank:185,heat:4,upgrades:[],players:{},terminals:{},intrusions:{},challenges:{},
+    targets,records,scans:0,targetSerial:4,ledger:ledger(),cycleEarned:0,cycleRequired:0,history:[],summary:null,
+    inventory:{seeds:0,soil:2,buds:0,wrap:2,packages:0},garden:{soil:false,planted:false,moisture:0,growth:0,light:true},
+    pending:[],orders:[],contracts:[],messages:[],alley:{visitor:'empty',next:now+14000},door:{visitor:'empty',next:now+23000},nightEnds:now+NIGHT_MS,
+    environment:{power:true,warning:null,cameraUntil:0},lastTick:now,nextTarget:now+40000,nextEvent:now+45000,
+    log:[{id:uid(),time:now,text:'Night one. Recover records, grow inventory, make the deadline.'}]};
 }
 export function addPlayer(room,id,name){
   const count=Object.keys(room.players).length;
   if(count>=4)throw Error('The hideout is full (4 players).');
-  room.players[id]={id,name:String(name||'Runner').trim().slice(0,22)||'Runner',x:-1.2+(count%2)*2.2,z:-.75+Math.floor(count/2)*1.4,yaw:0};
+  room.players[id]={id,name:String(name||'Runner').trim().slice(0,22)||'Runner',x:-1.2+(count%2)*2.2,z:-.75+Math.floor(count/2)*1.4,yaw:0,lastMove:Date.now(),connected:true,carrying:0};
   room.terminals[id]={target:null,cwd:'/',seen:[]};log(room,room.players[id].name+' entered the hideout.');
 }
-export function movePlayer(room,id,p){
-  const player=room.players[id];if(!player)return;
+export function movePlayer(room,id,p,now=Date.now()){
+  const player=room.players[id];if(!player||room.phase!=='night')return;
   if(!Number.isFinite(p?.x)||!Number.isFinite(p?.z)||!Number.isFinite(p?.yaw))return;
-  player.x=clamp(p.x,-4.15,4.15);player.z=clamp(p.z,-3.6,3.6);player.yaw=p.yaw;
+  const max=Math.min(.8,Math.max(.015,(now-player.lastMove)/1000)*4.2);
+  const distance=Math.hypot(p.x-player.x,p.z-player.z),ratio=distance>max?max/distance:1;
+  const resolved=slide(player,{x:player.x+(p.x-player.x)*ratio,z:player.z+(p.z-player.z)*ratio});
+  Object.assign(player,resolved,{yaw:p.yaw,lastMove:now});
 }
 export function publicState(room,id){
-  const {targets,records,terminals,intrusions,...rest}=room;
-  return {...rest,players:Object.values(room.players),terminal:terminals[id]||null,intrusion:intrusions[id]||null,
+  const {targets,records,terminals,intrusions,challenges,...rest}=room;
+  return {...rest,now:Date.now(),earnings:income(room),alley:{...room.alley,phase:phase(room.alley,Date.now()),clue:clue(room.alley,Date.now())},door:{...room.door,phase:phase(room.door,Date.now()),clue:clue(room.door,Date.now())},players:Object.values(room.players).map(({lastMove,...p})=>p),challenge:challenges[id]||null,terminal:terminals[id]||null,intrusion:intrusions[id]||null,
     discovered:Object.entries(records).filter(([,r])=>r.discovered).map(([code,r])=>({code,kind:r.kind,sold:r.sold,value:r.value,target:r.target})),
-    targets:Object.keys(targets)};
+    targets:Object.keys(targets),targetInfo:Object.values(targets).map(({name,tier,job})=>({name,tier,job}))};
 }
 function beginIntrusion(room,id,training=false){
   if(room.intrusions[id] || !room.players[id])return false;
-  const sequence=Array.from({length:6+Math.floor(Math.random()*2)},()=>pick(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown']));
-  room.intrusions[id]={sequence,index:0,expires:Date.now()+(training?30000:9500),training};
+  const sequence=Array.from({length:6+Math.min(3,room.day-1)+Math.floor(Math.random()*2)},()=>pick(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown']));
+  room.intrusions[id]={sequence,index:0,expires:Date.now()+(training?30000:9500)+(room.upgrades.includes('firewall')?4000:0),duration:(training?30000:9500)+(room.upgrades.includes('firewall')?4000:0),training};
   log(room,'INTRUSION ALERT: '+room.players[id].name+"'s workstation is under attack!");
   room.heat=clamp(room.heat+3,0,100);return true;
 }
@@ -59,7 +70,7 @@ function loseIntrusion(room,id){
   if(!room.intrusions[id])return;
   delete room.intrusions[id];
   const loss=Math.min(room.bank,Math.ceil(room.bank*(room.upgrades.includes('vault')?.06:.18)));
-  room.bank-=loss;room.heat=clamp(room.heat+8,0,100);
+  spend(room,loss,true);room.heat=clamp(room.heat+8,0,100);
   log(room,room.players[id]?.name+' was breached. $'+loss+' drained from the digital wallet.');
 }
 export function intrusionInput(room,id,key){
@@ -80,7 +91,7 @@ function scrape(room,id,target,folder){
   const found=Object.keys(room.records).filter(code=>room.records[code].target===target.name&&room.records[code].folder===folder);
   for(const code of found)room.records[code].discovered=true;
   const decoys=folder==='photos'?[]:['REF-'+Math.floor(10000+Math.random()*89000),'INV-'+Math.floor(1000+Math.random()*8500)];
-  room.heat=clamp(room.heat+2,0,100);
+  room.heat=clamp(room.heat+target.tier,0,100);
   if(room.scans%3===0)beginIntrusion(room,id);
   return 'Scanning '+target.name+':/'+folder+' ...\n'+(found.length+decoys.length?[...found,...decoys].map((c,i)=>'['+(i+1)+'] '+c).join('\n'):'No notable records found.')+'\nCheck possible records in BLACK MARKET.';
 }
@@ -88,13 +99,17 @@ export function terminalCommand(room,id,line){
   const state=room.terminals[id];if(!state)return {text:'Session unavailable.'};
   const words=String(line||'').trim().split(/\s+/);const verb=(words[0]||'').toLowerCase();
   const active=state.target&&room.targets[state.target];
+  if(room.phase!=='night')return {text:'The shift is closed.'};
+  if(!room.environment.power)return {text:'NO POWER. Reset the breaker beside the supply door.'};
   if(room.intrusions[id])return {text:'SYSTEM LOCKED — repel the intrusion first.'};
   let output='';
   if(verb==='help')output='AVAILABLE: help, targets, connect NAME, ls, pwd, cd NAME, cd .., cat FILE, scrape [FOLDER], cd scrape FOLDER, disconnect, training\nAll recovered records are local to this session.';
-  else if(verb==='targets')output=Object.keys(room.targets).map(x=>'● '+x).join('\n');
+  else if(verb==='targets')output=Object.values(room.targets).map(x=>'● '+x.name+' · TIER '+x.tier+' · '+x.job).join('\n');
   else if(verb==='connect'){
     const name=(words[1]||'').toUpperCase();
     if(!room.targets[name])output='Unknown simulated target. Use "targets".';
+    else if(room.targets[name].tier>Math.min(3,room.day))output='Target locked until night '+room.targets[name].tier+'.';
+    else if(room.targets[name].tier===3&&!room.upgrades.includes('decoder'))output='Tier 3 decoder required. Visit relay.onion.';
     else{state.target=name;state.cwd='/';output='Dialing '+name+' ...\nCONNECTION ESTABLISHED.\nUse "ls" to explore its five folders.';}
   }
   else if(verb==='disconnect'){state.target=null;state.cwd='/';output='Remote session closed.';}
@@ -122,75 +137,160 @@ export function terminalCommand(room,id,line){
   state.seen=[...state.seen,String(line||'')].slice(-20);
   return {text:output,target:state.target,cwd:state.cwd,delay:verb==='scrape'||(verb==='cd'&&words[1]==='scrape')?1100:350};
 }
+const fail=text=>({ok:false,text});
 export function gameAction(room,id,action,payload={}){
-  const now=Date.now();let message='';
-  if(!room.players[id])return {ok:false,text:'Player missing.'};
-  if(action==='start'){room.started=true;message='Night shift started. Keep your operation alive.';}
-  else if(action==='market:verify'){
-    const code=String(payload.code||'').trim().toUpperCase();
-    const r=room.records[code];
-    if(!r||!r.discovered)message='NOT RECOGNIZED — this code has not been recovered.';
-    else if(r.kind==='JUNK')message='INVALID RECORD — random data, no payout.';
-    else if(r.sold)message='ALREADY SOLD — this record has been exhausted.';
-    else message='VALID '+PRODUCTS[r.kind].name.toUpperCase()+' — $'+r.value+' offer available.';
-  }else if(action==='market:sell'){
-    const code=String(payload.code||'').trim().toUpperCase(),r=room.records[code];
-    if(!r||!r.discovered||r.sold||r.kind==='JUNK')message='Cannot sell this record.';
-    else {r.sold=true;room.bank+=r.value;room.heat=clamp(room.heat+5,0,100);message='Sale completed. +$'+r.value+' added to wallet.';log(room,room.players[id].name+' sold a '+PRODUCTS[r.kind].name.toLowerCase()+'.');}
-  }else if(action==='buy'){
-    const items={seeds:55,wrap:25,firewall:220,vault:300};
-    const item=String(payload.item||'');const price=items[item];
-    if(!price)message='Unknown listing.';
-    else if(room.bank<price)message='Insufficient funds.';
-    else if(['firewall','vault'].includes(item)&&room.upgrades.includes(item))message='Already installed.';
-    else{
-      room.bank-=price;
-      if(['firewall','vault'].includes(item)){room.upgrades.push(item);message='Software installed. '+item.toUpperCase()+' active.';}
-      else {room.pending.push({item,arrives:now+6500});room.door={visitor:'courier',next:now+18000};message='Supply ordered. Check the peephole before opening the door.';}
-    }
-  }else if(action==='garden:plant'){
-    if(room.inventory.seeds<1||room.inventory.plants>0)message='Requires seeds and an empty planter.';
-    else {room.inventory.seeds--;room.inventory.plants=1;room.inventory.readyAt=now+35000;message='One crop started. It will be ready shortly.';}
-  }else if(action==='garden:harvest'){
-    if(!room.inventory.plants||now<room.inventory.readyAt)message='Nothing ready for harvest yet.';
-    else {room.inventory.plants=0;room.inventory.buds+=2;message='Harvest ready. +2 units of inventory.';}
-  }else if(action==='garden:package'){
-    if(room.inventory.buds<1||room.inventory.wrap<1)message='Requires harvested inventory and packaging.';
-    else {room.inventory.buds--;room.inventory.wrap--;room.inventory.packages++;message='Package sealed. One shipment ready for the alley chute.';}
-  }else if(action==='alley:drop'){
-    if(room.inventory.packages<1)message='No packed goods available.';
-    else{
-      room.inventory.packages--;
-      if(room.alley.visitor==='buyer'){room.bank+=190;room.heat=clamp(room.heat+3,0,100);message='Pickup confirmed. +$190 received.';log(room,'A dead drop paid $190.');}
-      else {message=room.alley.visitor==='thief'?'THIEF TOOK YOUR PACKAGE. No payment.':'Package left unattended. It vanished.';room.heat=clamp(room.heat+7,0,100);}
-      room.alley={visitor:'empty',next:now+15000};
-    }
-  }else if(action==='door:peek')message=room.door.visitor==='empty'?'Quiet hallway. Nobody at the door.':room.door.visitor==='courier'?'A courier is standing outside with a parcel.':'Something is standing outside. It is NOT your courier.';
-  else if(action==='door:open'){
-    if(room.door.visitor==='courier'){
-      for(const p of room.pending){if(p.item==='seeds')room.inventory.seeds+=2;else if(p.item==='wrap')room.inventory.wrap+=4;}
-      room.pending=[];room.door={visitor:'empty',next:now+17000};message='Supplies received. Door secured.';
-    }else if(room.door.visitor==='intruder'){
-      const loss=Math.min(room.bank,95);room.bank-=loss;room.heat=clamp(room.heat+20,0,100);room.door={visitor:'empty',next:now+25000};message='INTRUDER! You barely escaped. Lost $'+loss+'.';log(room,'An intruder forced their way into the hideout.');
-    }else message='You opened an empty hallway.';
+  const now=Date.now(),p=room.players[id];payload=payload||{};
+  if(!p)return fail('Player missing.');
+  if(action==='start'){
+    if(room.phase!=='lobby')return fail('Shift already started.');
+    room.started=true;room.phase='night';room.nightEnds=now+NIGHT_MS;room.lastTick=now;
+    replenish(room,now);return {ok:true,text:'Four minutes until dawn. Keep the door locked.'};
   }
-  else message='Unknown interaction.';
-  return {ok:true,text:message};
+  if(action==='night:next'){
+    if(room.phase!=='summary')return fail('The crew cannot advance yet.');
+    nextNight(room,now);replenish(room,now);return {ok:true,text:'Night '+room.day+'. New quota. Stay sharp.'};
+  }
+  if(room.phase!=='night')return fail('The shift is closed.');
+  if(now>=room.nightEnds){tick(room,now);return fail('Dawn. Review the shift ledger.');}
+  const station=action.startsWith('garden:')?'garden':action.startsWith('pack:')?'packaging':action.startsWith('door:')?'door':action==='alley:drop'?'chute':action==='breaker:reset'?'breaker':null;
+  if(station&&!atStation(p,station))return fail('Walk to the '+station+' first.');
+  const digital=['buy','market:verify','market:sell','contract:start','contract:input'];
+  if(digital.includes(action)&&!room.environment.power)return fail('NO POWER. Reset the breaker.');
+  if(digital.includes(action)&&room.intrusions[id])return fail('Repel the intrusion first.');
+  let message='';
+  if(action==='market:verify'||action==='market:sell'){
+    const code=String(payload.code||'').trim().toUpperCase(),r=room.records[code];
+    if(!r||!r.discovered)return fail('NOT RECOGNIZED — this code has not been recovered.');
+    if(r.kind==='JUNK')return fail('INVALID RECORD — random data, no payout.');
+    if(r.sold)return fail('ALREADY SOLD — this record has been exhausted.');
+    if(action==='market:verify')return {ok:true,text:'VALID '+PRODUCTS[r.kind].name.toUpperCase()+' — $'+r.value+' offer available.'};
+    r.sold=true;earn(room,'hacking',r.value);room.heat=clamp(room.heat+3,0,100);message='Sale completed. +$'+r.value+'.';
+  }else if(action==='message:send'){
+    if(!room.environment.power)return fail('The relay is offline.');
+    const text=String(payload.text||'').trim().slice(0,160);if(!text)return fail('Write a message first.');
+    room.messages.unshift({id:uid(),from:p.name,text,time:now});room.messages=room.messages.slice(0,20);
+    return {ok:true,text:'Sent to the crew.'};
+  }else if(action==='buy'){
+    const item=String(payload.item||''),entry=CATALOG[item];
+    if(!Object.hasOwn(CATALOG,item))return fail('Unknown listing.');
+    if(room.bank<entry.price)return fail('Insufficient funds.');
+    if(!entry.supply&&room.upgrades.includes(item))return fail('Already installed.');
+    if(room.pending.length>=8)return fail('Courier bag full. Collect your supplies first.');
+    spend(room,entry.price);
+    if(entry.supply){room.pending.push({item,amount:entry.amount,arrives:now+6500});if(room.door.visitor==='empty')room.door=visitor('courier',now,'door');message='Order dispatched. Collect the taped parcel at your door.';}
+    else{room.upgrades.push(item);message=entry.name+' installed.';}
+  }else if(action.startsWith('garden:')){
+    const g=room.garden,inv=room.inventory;
+    if(action==='garden:soil'){
+      if(g.soil||g.planted||!inv.soil)return fail('Needs an empty pot and substrate.');
+      inv.soil--;g.soil=true;message='Substrate tipped into the pot.';
+    }else if(action==='garden:plant'){
+      if(!g.soil||g.planted||!inv.seeds)return fail('Prepare a pot and collect seed capsules first.');
+      inv.seeds--;g.planted=true;g.growth=0;g.moisture=0;message='Capsule planted. Pick up the watering can.';
+    }else if(action==='garden:water'){
+      if(!g.planted)return fail('Plant a capsule first.');
+      g.moisture=100;message='Water poured. Reservoir full.';
+    }else if(action==='garden:light'){g.light=!g.light;message=g.light?'Grow lamp on.':'Grow lamp off.';}
+    else if(action==='garden:harvest'){
+      if(!g.planted||g.growth<100)return fail('The crop is still growing.');
+      if(p.carrying)return fail('Take your harvest to the packing table first.');
+      p.carrying=room.upgrades.includes('tools')?4:3;Object.assign(g,{soil:false,planted:false,growth:0,moisture:0});message='Harvest in hand. Carry it to the packing table.';
+    }else return fail('Unknown growing action.');
+  }else if(action==='pack:deposit'){
+    if(!p.carrying)return fail('Your hands are empty.');
+    room.inventory.buds+=p.carrying;p.carrying=0;message='Harvest placed on the table.';
+  }else if(action==='pack:seal'){
+    if(room.inventory.buds<1||room.inventory.wrap<1)return fail('Needs harvest and sealing sleeves.');
+    room.inventory.buds--;room.inventory.wrap--;room.inventory.packages++;message='Folded. Sealed. Ready for the chute.';
+  }else if(action==='alley:drop'){
+    if(!room.inventory.packages)return fail('No sealed packages.');
+    if(phase(room.alley,now)!=='waiting')return fail('Wait until someone reaches the tray.');
+    room.inventory.packages--;
+    if(room.alley.visitor==='buyer'){
+      const order=room.orders.find(o=>!o.completed&&o.expires>now);
+      const amount=order?.payout||190+room.day*20;
+      if(order)order.completed=true;earn(room,'deliveries',amount);message='Pickup confirmed. +$'+amount+'.';
+      room.alley.outcome='pickup';
+    }else{room.ledger.losses+=0;room.shipmentsLost=(room.shipmentsLost||0)+1;room.heat=clamp(room.heat+10,0,100);message='The package disappeared. No payment received.';room.alley.outcome='theft';}
+    room.alley.leaveAt=now;room.alley.next=now+6000;
+  }else if(action==='door:peek')return {ok:true,text:clue(room.door,now)};
+  else if(action==='door:open'){
+    if(phase(room.door,now)!=='waiting')return fail('Nobody is waiting at the door.');
+    if(room.door.visitor==='courier'){
+      const ready=room.pending.filter(x=>x.arrives<=now);
+      if(!ready.length)return fail('The courier has no parcel ready for you.');
+      for(const item of ready)room.inventory[item.item]+=item.amount;
+      room.pending=room.pending.filter(x=>x.arrives>now);message='Supplies received. Door secured.';
+    }else{const loss=spend(room,95+room.day*20,true);room.heat=clamp(room.heat+15,0,100);room.environment.power=false;message='The stranger forced the lock. Lost $'+loss+'. Reset the damaged breaker.';}
+    room.door.leaveAt=now;room.door.next=now+6000;
+  }else if(action==='door:brace'){
+    if(room.door.visitor==='empty')return fail('The door is already secure.');
+    room.door.leaveAt=now;room.door.next=now+6000;room.heat=Math.max(0,room.heat-3);message='Chain secured. The footsteps retreat.';
+  }else if(action==='breaker:reset'){
+    room.environment.power=true;room.environment.warning=null;message='Breaker reset. Power restored.';
+  }else if(action==='contract:start'){
+    if(room.challenges[id])return fail('Finish the current connection first.');
+    const c=room.contracts.find(c=>c.id===payload.id);
+    if(!c||c.completed||c.expires<=now||c.owner)return fail('Contract unavailable.');
+    c.owner=id;
+    room.challenges[id]={id:c.id,type:c.type,expires:now+22000,index:0,sequence:Array.from({length:4+Math.floor(room.day/2)},()=>pick(['1','2','3','4'])),revealUntil:now+3000,windowStart:now+2800,windowEnd:now+3800};
+    message=c.type==='memory'?'Remember the sequence. Repeat after the signal clears.':'Stop the carrier in the green band.';
+  }else if(action==='contract:input'){
+    const c=room.challenges[id];if(!c)return fail('No active contract.');
+    const job=room.contracts.find(j=>j.id===c.id);
+    if(!job||job.completed)return fail('Contract closed.');
+    if(c.type==='memory'&&now<c.revealUntil)return fail('Wait for the signal to clear.');
+    const correct=now<=c.expires&&(c.type==='memory'?String(payload.key)===c.sequence[c.index]:now>=c.windowStart&&now<=c.windowEnd);
+    if(!correct){delete room.challenges[id];job.owner=null;job.expires=now;room.heat=clamp(room.heat+5,0,100);return fail('Signal lost. Contract burned.');}
+    c.index++;
+    if(c.type==='pulse'||c.index===c.sequence.length){job.completed=true;earn(room,'contracts',job.payout);delete room.challenges[id];message='Contract cleared. +$'+job.payout+'.';}
+    else return {ok:true,text:'Packet accepted.'};
+  }else return fail('Unknown interaction.');
+  if(station)p.activity={id:uid(),action,until:now+900};
+  log(room,message);return {ok:true,text:message};
+}
+function replenish(room,now){
+  room.orders=room.orders.filter(o=>!o.completed&&o.expires>now);
+  while(room.orders.length<3)room.orders.push({id:uid(),payout:190+room.day*20,expires:now+100000,completed:false});
+  room.contracts=room.contracts.filter(c=>(!c.completed&&c.expires>now)||c.owner&&room.challenges[c.owner]);
+  while(room.contracts.length<3)room.contracts.push({id:uid(),type:room.contracts.length%2?'pulse':'memory',title:pick(['Recover a cold archive','Rebuild a relay key','Intercept a dead signal']),payout:100+room.day*35,expires:now+110000,completed:false,owner:null});
 }
 export function tick(room,now=Date.now()){
-  let changed=false;
-  for(const [id,intr] of Object.entries(room.intrusions))if(now>=intr.expires){loseIntrusion(room,id);changed=true;}
-  if(room.alley.next<=now){
-    room.alley={visitor:pick(['buyer','buyer','thief','empty']),next:now+16000+Math.floor(Math.random()*13000)};
-    if(room.alley.visitor!=='empty')log(room,room.alley.visitor==='buyer'?'The alley camera picked up someone waiting at the drop.':'Unidentified movement detected in the alley.');
-    changed=true;
+  if(room.phase!=='night')return false;
+  if(now>=room.nightEnds){finishNight(room,room.nightEnds);return true;}
+  const dt=Math.max(0,Math.min(now-room.lastTick,2000))/1000;room.lastTick=now;
+  const g=room.garden;
+  if(g.planted){
+    if(g.moisture>0&&g.light&&room.environment.power)g.growth=Math.min(100,g.growth+dt*100/(room.upgrades.includes('lamp')?42:60));
+    g.moisture=Math.max(0,g.moisture-dt*(room.upgrades.includes('irrigation')?.55:1.1));
   }
-  if(room.door.next<=now){
-    room.door={visitor:room.pending.length?'courier':pick(['intruder','empty','empty']),next:now+26000};
-    if(room.door.visitor!=='empty')log(room,'A knock came from the supply entrance.');
-    changed=true;
+  for(const [id,intr] of Object.entries(room.intrusions))if(now>=intr.expires)loseIntrusion(room,id);
+  for(const [id,c] of Object.entries(room.challenges))if(now>=c.expires){delete room.challenges[id];const job=room.contracts.find(j=>j.id===c.id);if(job){job.owner=null;job.expires=now;}log(room,'A contract signal expired.');}
+  for(const key of ['alley','door'])if(room[key].next<=now){
+    const was=room[key].visitor;
+    if(was!=='empty'){room[key]={visitor:'empty',next:now+7000};}
+    else{
+      const kind=key==='alley'?pick(['buyer','buyer','thief']):room.pending.length?'courier':pick(['intruder','empty','empty']);
+      room[key]=kind==='empty'?{visitor:'empty',next:now+20000}:visitor(kind,now,key);
+      if(kind!=='empty')log(room,key==='door'?'Footsteps in the hallway. Check the peephole.':'Movement near the dead drop.');
+    }
   }
-  if(room.inventory.plants&&room.inventory.readyAt<=now&&!room.inventory.announced){room.inventory.announced=true;log(room,'A crop is ready in the grow cabinet.');changed=true;}
-  if(!room.inventory.plants)room.inventory.announced=false;
-  return changed;
+  if(now>=room.nextTarget){
+    const i=room.targetSerial++,name=pick(['MOTH','DUSK','ASH','VAULT'])+'-'+i;
+    // Bound the live archive without deleting a connected player's target.
+    const connected=new Set(Object.values(room.terminals).map(t=>t.target));
+    if(Object.keys(room.targets).length>=12){const old=Object.keys(room.targets).find(n=>!connected.has(n));if(old){delete room.targets[old];for(const [code,r]of Object.entries(room.records))if(r.target===old&&!r.discovered)delete room.records[code];}}
+    room.targets[name]=makeTarget(name,Math.min(i,room.day*4-1),room.records);
+    room.nextTarget=now+40000;replenish(room,now);log(room,'Fresh archives and contracts arrived on the network.');
+  }
+  if(room.environment.warning&&now>=room.environment.warning.at){room.environment.power=false;room.environment.warning=null;log(room,'POWER LOST. Reset the breaker beside the supply door.');}
+  if(now>=room.nextEvent){
+    const choice=pick(['power','camera','knock','hack']);
+    if(choice==='power'&&room.environment.power){room.environment.warning={at:now+12000};log(room,'The ballast is buzzing. Reset the breaker before it trips.');}
+    else if(choice==='camera'){room.environment.cameraUntil=now+(room.upgrades.includes('camera')?4000:10000);log(room,'Camera signal unstable. Wait for a clear view before dropping.');}
+    else if(choice==='knock'&&room.door.visitor==='empty'){room.door=visitor('intruder',now,'door');log(room,'Three slow knocks. The handle starts to turn.');}
+    else if(choice==='hack'){const id=pick(Object.keys(room.players).filter(id=>room.players[id].connected));if(id)beginIntrusion(room,id);}
+    room.nextEvent=now+Math.max(22000,60000-room.day*4000-room.heat*120);
+  }
+  return true;
 }
