@@ -1,3 +1,4 @@
+import {visitorMotion,turnToward} from '../shared/npc.js';
 import * as THREE from 'three';
 import {wornTexture} from './surfaces.js';
 const mat=(c,rough=0.8,metal=0.08,extra={})=>new THREE.MeshStandardMaterial({color:c,roughness:rough,metalness:metal,...extra});
@@ -143,13 +144,12 @@ export class SecurityViews{
     for(const [people,state,hall] of [[this.alleyPeople,this.alleyState,false],[this.hallPeople,this.doorState,true]])for(const person of Object.values(people)){
       if(!person.visible)continue;
       const approaching=now<state.waitAt,leaving=now>=state.leaveAt;
-      const progress=approaching?Math.max(0,1-(state.waitAt-now)/6500):leaving?Math.min(1,(now-state.leaveAt)/5000):0;
-      const motion=approaching?1-progress:leaving?progress:0;
-      const kind=person.userData.pose;
-      person.position.set(hall?7.05:kind==='thief'?-1.5:-.8,Math.sin(t*1.4)*.009,hall?-1.45-motion*10:-11+motion*4.3);
-      person.rotation.y=hall?(motion>.1?0:Math.PI/2):Math.PI+(kind==='thief'?Math.sin(t*1.7)*.55:Math.sin(t*.7)*.08);
+      const route=visitorMotion(state,now,hall),kind=person.userData.pose;
+      person.position.set(hall?7.05:kind==='thief'?-1.5:-.8,Math.sin(t*1.4)*.009,route.z);
+      if(person.userData.visitId!==state.id){person.userData.visitId=state.id;person.rotation.y=route.yaw;}
+      person.rotation.y=turnToward(person.rotation.y,route.yaw+(!approaching&&!leaving&&kind==='thief'?Math.sin(t*1.7)*.3:0),dt);
       person.rotation.z=!approaching&&!leaving&&kind==='intruder'?Math.sin(t)*.04:Math.sin(t)*.006;
-      const stride=motion>.02?Math.sin(t*7)*.45:Math.sin(t)*.02;
+      const stride=Math.sin(t*7)*.45*route.stride;
       person.userData.legs.forEach((leg,i)=>leg.rotation.x=stride*(i?1:-1));
       person.userData.arms.forEach((arm,i)=>{arm.rotation.x=kind==='courier'&&i===1?-.8:kind==='buyer'&&i===0?-.5:-stride*(i?1:-1)*.65;});
       person.rotation.x=state.outcome&&now-state.leaveAt<1300?-Math.sin((now-state.leaveAt)/1300*Math.PI)*.35:0;

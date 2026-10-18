@@ -84,6 +84,7 @@ export function createApp(){
   const interval=setInterval(()=>{
     for(const [token,session] of sessions)if(session.expires<Date.now()){
       const room=rooms.get(session.code);if(room){const p=room.players[session.id];if(p)room.inventory.buds+=p.carrying||0;delete room.players[session.id];delete room.terminals[session.id];delete room.intrusions[session.id];
+      const remote=room.remoteSessions[session.id];if(remote){const target=room.remoteTargets[remote.target];if(target)target.owner=null;delete room.remoteSessions[session.id];}
       const challenge=room.challenges[session.id];if(challenge){const job=room.contracts.find(c=>c.id===challenge.id);if(job)job.owner=null;delete room.challenges[session.id];}
       if(!Object.keys(room.players).length)rooms.delete(session.code);else emitState(room);}sessions.delete(token);
     }

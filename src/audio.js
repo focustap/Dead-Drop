@@ -11,5 +11,11 @@ export class Soundscape{
   }
   setVolume(v){this.volume=v;if(this.master)this.master.gain.value=v;}
   tone(freq=340,duration=.13,volume=.08){const c=this.context;if(!c)return;const o=c.createOscillator(),g=c.createGain();o.type='sine';o.frequency.setValueAtTime(freq,c.currentTime);o.frequency.exponentialRampToValueAtTime(Math.max(20,freq*.5),c.currentTime+duration);g.gain.setValueAtTime(volume,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+duration);o.connect(g);g.connect(this.master);o.start();o.stop(c.currentTime+duration);}
-  update(state){const entry=state.log?.[0];if(!entry||entry.id===this.lastLog)return;this.lastLog=entry.id;const text=entry.text.toLowerCase();if(/knock|footstep/.test(text)){[0,320,670].forEach(delay=>setTimeout(()=>this.tone(100,.18,.25),delay));}else if(/lost|intrusion|buzzing/.test(text))this.tone(140,.7,.15);else if(/sealed|poured|planted|received|sale|confirmed/.test(text))this.tone(500,.16,.1);}
+  alarm(){this.tone(1450,.8,.35);setTimeout(()=>this.tone(93,.8,.28),90);setTimeout(()=>this.tone(920,.45,.22),200);}
+  scare(){this.tone(52,1.4,.35);this.tone(760,.6,.22);setTimeout(()=>this.tone(130,.8,.18),120);}
+  encounter(state){const a=state.horror?.active;if(!a||state.day+':'+a.id===this.encounterId)return;this.encounterId=state.day+':'+a.id;
+    const pattern=a.kind==='window'?[0,500,1100]:a.kind==='hall'?[0,650,1400,2300]:[0,350,900];
+    pattern.forEach(delay=>setTimeout(()=>this.tone(a.kind==='window'?780:a.kind==='hall'?68:110,.22,a.kind==='window'?.12:.18),delay));
+  }
+  update(state){this.encounter(state);const entry=state.log?.[0];if(!entry||entry.id===this.lastLog)return;this.lastLog=entry.id;const text=entry.text.toLowerCase();if(/knock|footstep/.test(text)){[0,320,670].forEach(delay=>setTimeout(()=>this.tone(100,.18,.25),delay));}else if(/lost|intrusion|buzzing/.test(text))this.tone(140,.7,.15);else if(/sealed|poured|planted|received|sale|confirmed/.test(text))this.tone(500,.16,.1);}
 }

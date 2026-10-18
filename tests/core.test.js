@@ -38,10 +38,11 @@ test('decoy codes cannot be sold and valid discoveries increase only the shared 
   gameAction(room,'p1','market:sell',{code:valid});
   assert.equal(room.bank,before+payout);
 });
-test('scanning three folders causes an intrusion; correct sequence protects cash',()=>{
+test('routine scanning stays quiet; training retains arrow defense',()=>{
   const room=roomWithPlayer();
   terminalCommand(room,'p1','connect NOVA-17');
   for(const folder of ['finances','documents','backups'])terminalCommand(room,'p1','scrape '+folder);
+  assert.equal(room.intrusions.p1,undefined);terminalCommand(room,'p1','training');
   const {sequence}=room.intrusions.p1;
   assert.ok(sequence.length>=6);
   const starting=room.bank;
@@ -65,7 +66,7 @@ test('timed-out intrusion damages the wallet and does not fire twice',()=>{
   tick(room,Date.now());assert.equal(room.bank,410);
 });
 
-const stand=(r,where,id='p1')=>Object.assign(r.players[id],STATIONS[where]);
+const stand=(r,where,id='p1')=>Object.assign(r.players[id],STATIONS[where],{zone:where==='breaker'?'hall':'apartment'});
 test('courier supplies have travel time, require proximity, and can only be claimed once',t=>{
   let now=Date.now();t.mock.method(Date,'now',()=>now);const r=roomWithPlayer();
   gameAction(r,'p1','buy',{item:'seeds'});assert.equal(r.inventory.seeds,0);
@@ -95,7 +96,7 @@ test('thieves cost shipments, an intruder costs bounded funds, and bracing has c
   gameAction(r,'p1','alley:drop');assert.equal(r.bank,185);assert.equal(r.shipmentsLost,1);
   stand(r,'door');r.door=visitor('intruder',now-7000,'door');gameAction(r,'p1','door:brace');assert.equal(r.bank,185);
   r.door=visitor('intruder',now-7000,'door');gameAction(r,'p1','door:open');assert.equal(r.bank,70);assert.equal(r.environment.power,false);
-  stand(r,'breaker');gameAction(r,'p1','breaker:reset');assert.equal(r.environment.power,true);
+  r.players.p1.stunnedUntil=0;stand(r,'breaker');gameAction(r,'p1','breaker:reset');assert.equal(r.environment.power,true);
 });
 test('swept collision prevents tunneling through each prop and bounds movement speed',()=>{
   const r=roomWithPlayer();const start={...r.players.p1};movePlayer(r,'p1',{x:99,z:-99,yaw:1});assert.ok(Math.hypot(r.players.p1.x-start.x,r.players.p1.z-start.z)<1);

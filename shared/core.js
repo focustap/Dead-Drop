@@ -1,9 +1,11 @@
+import {seedRemote,remotePublic,remoteAction,tickRemote} from './remote.js';
+import {newHorror,startEncounter,tickHorror,horrorAction,openedIntruder} from './horror.js';
 import {slide,atStation} from './layout.js';
 import {NIGHT_MS,QUOTAS,CATALOG,ledger,earn,spend,income,visitor,phase,clue,finishNight,nextNight} from './campaign.js';
 // Dead Drop's complete simulated game state. No real networks, accounts, or personal data.
 const PRODUCTS = Object.freeze({
-  CARD:{name:'Payment record',base:105}, ID:{name:'Identity record',base:140},
-  WALLET:{name:'Wallet fragment',base:270}, JUNK:{name:'Unidentified data',base:0}
+  CARD:{name:'Payment record',base:85}, ID:{name:'Identity record',base:115},
+  WALLET:{name:'Wallet fragment',base:185}, JUNK:{name:'Unidentified data',base:0}
 });
 const TARGET_NAMES=['NOVA-17','ORCHID-02','SABLE-91','CIPHER-08'];
 const pick=a=>a[Math.floor(Math.random()*a.length)];
@@ -33,34 +35,38 @@ export function newRoom(code='LOCAL'){
   const records={},targets=Object.fromEntries(TARGET_NAMES.map((n,i)=>[n,makeTarget(n,i,records)]));
   const now=Date.now();
   return {code,created:now,started:false,phase:'lobby',day:1,quota:QUOTAS[0],bank:185,heat:4,upgrades:[],players:{},terminals:{},intrusions:{},challenges:{},
-    targets,records,scans:0,targetSerial:4,ledger:ledger(),cycleEarned:0,cycleRequired:0,history:[],summary:null,
+    targets,records,remoteTargets:{},remoteSessions:{},extractions:{},scans:0,targetSerial:4,ledger:ledger(),cycleEarned:0,cycleRequired:0,history:[],summary:null,
     inventory:{seeds:0,soil:2,buds:0,wrap:2,packages:0},garden:{soil:false,planted:false,moisture:0,growth:0,light:true},
     pending:[],orders:[],contracts:[],messages:[],alley:{visitor:'empty',next:now+14000},door:{visitor:'empty',next:now+23000},nightEnds:now+NIGHT_MS,
-    environment:{power:true,warning:null,cameraUntil:0},lastTick:now,nextTarget:now+40000,nextEvent:now+45000,
+    horror:newHorror(now),nextHack:now+75000,environment:{power:true,warning:null,cameraUntil:0},lastTick:now,nextTarget:now+40000,nextEvent:now+45000,
     log:[{id:uid(),time:now,text:'Night one. Recover records, grow inventory, make the deadline.'}]};
 }
 export function addPlayer(room,id,name){
   const count=Object.keys(room.players).length;
   if(count>=4)throw Error('The hideout is full (4 players).');
-  room.players[id]={id,name:String(name||'Runner').trim().slice(0,22)||'Runner',x:-1.2+(count%2)*2.2,z:-.75+Math.floor(count/2)*1.4,yaw:0,lastMove:Date.now(),connected:true,carrying:0};
+  room.players[id]={id,name:String(name||'Runner').trim().slice(0,22)||'Runner',x:-1.2+(count%2)*2.2,z:-.75+Math.floor(count/2)*1.4,yaw:0,lastMove:Date.now(),connected:true,carrying:0,zone:'apartment',hidden:false,stunnedUntil:0,safeUntil:room.horror.active?Date.now()+12000:0};
   room.terminals[id]={target:null,cwd:'/',seen:[]};log(room,room.players[id].name+' entered the hideout.');
 }
 export function movePlayer(room,id,p,now=Date.now()){
   const player=room.players[id];if(!player||room.phase!=='night')return;
+  if(player.hidden||player.stunnedUntil>now)return;
   if(!Number.isFinite(p?.x)||!Number.isFinite(p?.z)||!Number.isFinite(p?.yaw))return;
   const max=Math.min(.8,Math.max(.015,(now-player.lastMove)/1000)*4.2);
   const distance=Math.hypot(p.x-player.x,p.z-player.z),ratio=distance>max?max/distance:1;
-  const resolved=slide(player,{x:player.x+(p.x-player.x)*ratio,z:player.z+(p.z-player.z)*ratio});
+  const resolved=slide(player,{x:player.x+(p.x-player.x)*ratio,z:player.z+(p.z-player.z)*ratio},player.zone);
   Object.assign(player,resolved,{yaw:p.yaw,lastMove:now});
 }
 export function publicState(room,id){
-  const {targets,records,terminals,intrusions,challenges,...rest}=room;
-  return {...rest,now:Date.now(),earnings:income(room),alley:{...room.alley,phase:phase(room.alley,Date.now()),clue:clue(room.alley,Date.now())},door:{...room.door,phase:phase(room.door,Date.now()),clue:clue(room.door,Date.now())},players:Object.values(room.players).map(({lastMove,...p})=>p),challenge:challenges[id]||null,terminal:terminals[id]||null,intrusion:intrusions[id]||null,
+  const {targets,records,terminals,intrusions,challenges,remoteTargets,remoteSessions,extractions,...rest}=room;
+  return {...rest,...remotePublic(room,id),now:Date.now(),earnings:income(room),alley:{...room.alley,phase:phase(room.alley,Date.now()),clue:clue(room.alley,Date.now())},door:{...room.door,phase:phase(room.door,Date.now()),clue:clue(room.door,Date.now())},players:Object.values(room.players).map(({lastMove,...p})=>p),challenge:challenges[id]||null,terminal:terminals[id]||null,intrusion:intrusions[id]||null,
     discovered:Object.entries(records).filter(([,r])=>r.discovered).map(([code,r])=>({code,kind:r.kind,sold:r.sold,value:r.value,target:r.target})),
     targets:Object.keys(targets),targetInfo:Object.values(targets).map(({name,tier,job})=>({name,tier,job}))};
 }
-function beginIntrusion(room,id,training=false){
+export function beginIntrusion(room,id,training=false){
   if(room.intrusions[id] || !room.players[id])return false;
+  if(room.horror?.active)return false;
+  if(!training&&(Date.now()<(room.nextHack||0)||room.horror?.active||Object.keys(room.intrusions).length))return false;
+  if(!training)room.nextHack=Date.now()+90000;
   const sequence=Array.from({length:6+Math.min(3,room.day-1)+Math.floor(Math.random()*2)},()=>pick(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown']));
   room.intrusions[id]={sequence,index:0,expires:Date.now()+(training?30000:9500)+(room.upgrades.includes('firewall')?4000:0),duration:(training?30000:9500)+(room.upgrades.includes('firewall')?4000:0),training};
   log(room,'INTRUSION ALERT: '+room.players[id].name+"'s workstation is under attack!");
@@ -87,20 +93,23 @@ const dirNames=t=>Object.keys(t.folders);
 function scrape(room,id,target,folder){
   const contents=target.folders[folder];
   if(!contents)return 'Folder not found.';
-  room.scans++;
+  const state=room.terminals[id],now=Date.now();
+  if(now<(state.nextScan||0))return 'Probe cooling down. Read documents while the scanner clears.';
+  state.nextScan=now+8000;room.scans++;
   const found=Object.keys(room.records).filter(code=>room.records[code].target===target.name&&room.records[code].folder===folder);
-  for(const code of found)room.records[code].discovered=true;
+  const recovered=room.scans===1||Math.random()<.55?found:[];
+  for(const code of recovered)room.records[code].discovered=true;
   const decoys=folder==='photos'?[]:['REF-'+Math.floor(10000+Math.random()*89000),'INV-'+Math.floor(1000+Math.random()*8500)];
   room.heat=clamp(room.heat+target.tier,0,100);
-  if(room.scans%3===0)beginIntrusion(room,id);
-  return 'Scanning '+target.name+':/'+folder+' ...\n'+(found.length+decoys.length?[...found,...decoys].map((c,i)=>'['+(i+1)+'] '+c).join('\n'):'No notable records found.')+'\nCheck possible records in BLACK MARKET.';
+  if(room.scans%10===0&&Math.random()<.3)beginIntrusion(room,id);
+  return 'Scanning '+target.name+':/'+folder+' ...\n'+(recovered.length+decoys.length?[...recovered,...decoys].map((c,i)=>'['+(i+1)+'] '+c).join('\n'):'No notable records found.')+'\nCheck possible records in BLACK MARKET.';
 }
 export function terminalCommand(room,id,line){
   const state=room.terminals[id];if(!state)return {text:'Session unavailable.'};
   const words=String(line||'').trim().split(/\s+/);const verb=(words[0]||'').toLowerCase();
   const active=state.target&&room.targets[state.target];
   if(room.phase!=='night')return {text:'The shift is closed.'};
-  if(!room.environment.power)return {text:'NO POWER. Reset the breaker beside the supply door.'};
+  if(!room.environment.power)return {text:'NO POWER. Reset the breaker in the hallway.'};
   if(room.intrusions[id])return {text:'SYSTEM LOCKED — repel the intrusion first.'};
   let output='';
   if(verb==='help')output='AVAILABLE: help, targets, connect NAME, ls, pwd, cd NAME, cd .., cat FILE, scrape [FOLDER], cd scrape FOLDER, disconnect, training\nAll recovered records are local to this session.';
@@ -152,11 +161,17 @@ export function gameAction(room,id,action,payload={}){
   }
   if(room.phase!=='night')return fail('The shift is closed.');
   if(now>=room.nightEnds){tick(room,now);return fail('Dawn. Review the shift ledger.');}
+  if(p.stunnedUntil>now)return fail('Catch your breath.');
+  if(p.hidden&&action!=='hide:leave')return fail('Leave the wardrobe first.');
+  const physical=horrorAction(room,p,action,now);if(physical)return physical;
   const station=action.startsWith('garden:')?'garden':action.startsWith('pack:')?'packaging':action.startsWith('door:')?'door':action==='alley:drop'?'chute':action==='breaker:reset'?'breaker':null;
   if(station&&!atStation(p,station))return fail('Walk to the '+station+' first.');
+  if(action==='breaker:reset'&&p.zone!=='hall')return fail('The fuse box is outside in the hallway.');
   const digital=['buy','market:verify','market:sell','contract:start','contract:input'];
-  if(digital.includes(action)&&!room.environment.power)return fail('NO POWER. Reset the breaker.');
-  if(digital.includes(action)&&room.intrusions[id])return fail('Repel the intrusion first.');
+  if((digital.includes(action)||action.startsWith('remote:'))&&!room.environment.power)return fail('NO POWER. Reset the breaker.');
+  if((digital.includes(action)||action.startsWith('remote:'))&&room.intrusions[id])return fail('Repel the intrusion first.');
+  if(action==='contract:cancel'){const c=room.challenges[id];if(c){const j=room.contracts.find(j=>j.id===c.id);if(j){j.owner=null;j.expires=now;}delete room.challenges[id];}return {ok:true,text:'Connection abandoned.'};}
+  const remote=remoteAction(room,id,action,payload,now);if(remote)return remote;
   let message='';
   if(action==='market:verify'||action==='market:sell'){
     const code=String(payload.code||'').trim().toUpperCase(),r=room.records[code];
@@ -220,16 +235,18 @@ export function gameAction(room,id,action,payload={}){
       const ready=room.pending.filter(x=>x.arrives<=now);
       if(!ready.length)return fail('The courier has no parcel ready for you.');
       for(const item of ready)room.inventory[item.item]+=item.amount;
-      room.pending=room.pending.filter(x=>x.arrives>now);message='Supplies received. Door secured.';
-    }else{const loss=spend(room,95+room.day*20,true);room.heat=clamp(room.heat+15,0,100);room.environment.power=false;message='The stranger forced the lock. Lost $'+loss+'. Reset the damaged breaker.';}
+      room.pending=room.pending.filter(x=>x.arrives>now);room.horror.locked=true;message='Supplies received. Door secured.';
+    }else{const loss=spend(room,95+room.day*20,true);room.heat=clamp(room.heat+15,0,100);room.environment.power=false;openedIntruder(room,now);message='The stranger forced the lock. Lost $'+loss+'. Reset the damaged breaker.';}
     room.door.leaveAt=now;room.door.next=now+6000;
   }else if(action==='door:brace'){
+    room.horror.locked=true;
+    if(room.horror.active?.kind==='door'){room.horror.active=null;room.horror.recoveryUntil=now+30000;}
     if(room.door.visitor==='empty')return fail('The door is already secure.');
     room.door.leaveAt=now;room.door.next=now+6000;room.heat=Math.max(0,room.heat-3);message='Chain secured. The footsteps retreat.';
   }else if(action==='breaker:reset'){
     room.environment.power=true;room.environment.warning=null;message='Breaker reset. Power restored.';
   }else if(action==='contract:start'){
-    if(room.challenges[id])return fail('Finish the current connection first.');
+    if(room.challenges[id]||room.remoteSessions[id])return fail('Finish the current connection first.');
     const c=room.contracts.find(c=>c.id===payload.id);
     if(!c||c.completed||c.expires<=now||c.owner)return fail('Contract unavailable.');
     c.owner=id;
@@ -250,6 +267,7 @@ export function gameAction(room,id,action,payload={}){
   log(room,message);return {ok:true,text:message};
 }
 function replenish(room,now){
+  seedRemote(room,now);
   room.orders=room.orders.filter(o=>!o.completed&&o.expires>now);
   while(room.orders.length<3)room.orders.push({id:uid(),payout:190+room.day*20,expires:now+100000,completed:false});
   room.contracts=room.contracts.filter(c=>(!c.completed&&c.expires>now)||c.owner&&room.challenges[c.owner]);
@@ -258,19 +276,22 @@ function replenish(room,now){
 export function tick(room,now=Date.now()){
   if(room.phase!=='night')return false;
   if(now>=room.nightEnds){finishNight(room,room.nightEnds);return true;}
-  const dt=Math.max(0,Math.min(now-room.lastTick,2000))/1000;room.lastTick=now;
+  const elapsed=Math.max(0,now-room.lastTick),dt=Math.min(elapsed,2000)/1000;room.lastTick=now;
+  tickRemote(room,now,elapsed);
+  tickHorror(room,now);
   const g=room.garden;
   if(g.planted){
     if(g.moisture>0&&g.light&&room.environment.power)g.growth=Math.min(100,g.growth+dt*100/(room.upgrades.includes('lamp')?42:60));
     g.moisture=Math.max(0,g.moisture-dt*(room.upgrades.includes('irrigation')?.55:1.1));
   }
   for(const [id,intr] of Object.entries(room.intrusions))if(now>=intr.expires)loseIntrusion(room,id);
+  if(room.horror.active||!room.environment.power)for(const c of Object.values(room.challenges)){c.expires+=elapsed;c.revealUntil+=elapsed;c.windowStart+=elapsed;c.windowEnd+=elapsed;}
   for(const [id,c] of Object.entries(room.challenges))if(now>=c.expires){delete room.challenges[id];const job=room.contracts.find(j=>j.id===c.id);if(job){job.owner=null;job.expires=now;}log(room,'A contract signal expired.');}
   for(const key of ['alley','door'])if(room[key].next<=now){
     const was=room[key].visitor;
     if(was!=='empty'){room[key]={visitor:'empty',next:now+7000};}
     else{
-      const kind=key==='alley'?pick(['buyer','buyer','thief']):room.pending.length?'courier':pick(['intruder','empty','empty']);
+      const kind=key==='alley'?pick(['buyer','buyer','thief']):room.pending.length?'courier':'empty';
       room[key]=kind==='empty'?{visitor:'empty',next:now+20000}:visitor(kind,now,key);
       if(kind!=='empty')log(room,key==='door'?'Footsteps in the hallway. Check the peephole.':'Movement near the dead drop.');
     }
@@ -283,14 +304,15 @@ export function tick(room,now=Date.now()){
     room.targets[name]=makeTarget(name,Math.min(i,room.day*4-1),room.records);
     room.nextTarget=now+40000;replenish(room,now);log(room,'Fresh archives and contracts arrived on the network.');
   }
-  if(room.environment.warning&&now>=room.environment.warning.at){room.environment.power=false;room.environment.warning=null;log(room,'POWER LOST. Reset the breaker beside the supply door.');}
-  if(now>=room.nextEvent){
-    const choice=pick(['power','camera','knock','hack']);
-    if(choice==='power'&&room.environment.power){room.environment.warning={at:now+12000};log(room,'The ballast is buzzing. Reset the breaker before it trips.');}
+  if(room.environment.warning&&now>=room.environment.warning.at){room.environment.power=false;room.environment.warning=null;log(room,'POWER LOST. Reset the breaker in the hallway.');}
+  if(now>=room.nextEvent&&!room.horror.active&&now>=room.horror.recoveryUntil&&!Object.keys(room.intrusions).length){
+    const options=room.day===1?['door','echo','power','camera','hack']:['door','window','hall','echo','power','camera','hack'];
+    const choice=pick(options);
+    if(['door','window','hall','echo'].includes(choice))startEncounter(room,choice,now);
+    else if(choice==='power'&&room.environment.power){room.environment.warning={at:now+12000};log(room,'The ballast is buzzing. The fuse box is outside: check the peephole first.');}
     else if(choice==='camera'){room.environment.cameraUntil=now+(room.upgrades.includes('camera')?4000:10000);log(room,'Camera signal unstable. Wait for a clear view before dropping.');}
-    else if(choice==='knock'&&room.door.visitor==='empty'){room.door=visitor('intruder',now,'door');log(room,'Three slow knocks. The handle starts to turn.');}
-    else if(choice==='hack'){const id=pick(Object.keys(room.players).filter(id=>room.players[id].connected));if(id)beginIntrusion(room,id);}
-    room.nextEvent=now+Math.max(22000,60000-room.day*4000-room.heat*120);
+    else if(choice==='hack'){const id=pick(Object.keys(room.players).filter(id=>room.players[id].connected&&!room.players[id].hidden&&room.players[id].zone!=='hall'));if(id)beginIntrusion(room,id);}
+    room.nextEvent=now+Math.max(42000,78000-room.day*4500)+Math.random()*14000;
   }
   return true;
 }

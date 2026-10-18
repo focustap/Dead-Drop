@@ -1,3 +1,4 @@
+import {remoteView} from './remote.js';
 import {browserView,resolveSite} from './browser.js';
 import {Soundscape} from './audio.js';
 import {World} from './world.js';
@@ -7,6 +8,7 @@ const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>'$'+Math.max(0,Math.floor(n||0)).toLocaleString();
 const audio=new Soundscape();
+let lastScare=null;
 let stationOpen=null,site='market',browserHistory=[],summaryKey='',serverOffset=0,stationSignature='',lastRenderedView='';
 let settings={sensitivity:1,volume:.35,quality:'medium'};try{Object.assign(settings,JSON.parse(localStorage.getItem('dead-drop-settings')||'{}'));}catch{}
 const gameNow=()=>Date.now()+serverOffset;
@@ -17,12 +19,13 @@ const notify=text=>{const e=$('toast');e.textContent=text;e.classList.add('show'
 function rawState(){
   if(!local)return;
   state=publicState(local,self);
+  const p=state.players.find(p=>p.id===self);if(p&&world.zone!==p.zone){world.pos.x=p.x;world.pos.z=p.z;}
   refresh();
 }
 function receive(s){
   state=s;serverOffset=s.now-Date.now();
   const authoritative=s.players.find(p=>p.id===self);
-  if(active&&authoritative&&Math.hypot(world.pos.x-authoritative.x,world.pos.z-authoritative.z)>.8){world.pos.x=authoritative.x;world.pos.z=authoritative.z;}
+  if(active&&authoritative&&(world.zone!==authoritative.zone||Math.hypot(world.pos.x-authoritative.x,world.pos.z-authoritative.z)>.8)){world.pos.x=authoritative.x;world.pos.z=authoritative.z;}
   refresh();
 }
 function updateHud(){
@@ -37,7 +40,7 @@ function updateHud(){
   $('quota').textContent=fmt(state.earnings)+' / '+fmt(state.quota);
   $('quotaFill').style.width=Math.min(100,state.earnings/state.quota*100)+'%';
   $('carry').textContent=state.players.find(p=>p.id===self)?.carrying?'CARRYING HARVEST → PACKING TABLE':'';
-  renderStation();renderSummary();
+  renderStation();renderSummary();renderHorror();
   if(viewOpen){
     const v=viewOpen==='alley'?state.alley?.visitor:state.door?.visitor;
     $('surveillance').dataset.visitor=v||'empty';
@@ -74,10 +77,10 @@ function refresh(){
   if(!state)return;
   updateHud();renderChallenge();
   const intr=state.intrusion;
-  if(intr&&!lastIntrusion){if(viewOpen)closeView();lastIntrusion=true;document.exitPointerLock?.();$('intrusion').classList.remove('hidden');$('panel').classList.add('hidden');notify('INTRUSION DETECTED');}
+  if(intr&&!lastIntrusion){audio.alarm();if(viewOpen)closeView();lastIntrusion=true;document.exitPointerLock?.();$('intrusion').classList.remove('hidden');$('panel').classList.add('hidden');notify('INTRUSION DETECTED');}
   else if(!intr&&lastIntrusion){lastIntrusion=false;$('intrusion').classList.add('hidden');if(panelOpen)$('panel').classList.remove('hidden');notify('SYSTEM RESPONSE COMPLETE');}
   if(panelOpen&&!intr&&!inFlight){
-    const signature=JSON.stringify([tab,state.bank,state.heat,state.inventory,state.messages,state.contracts,state.orders,state.pending,state.door,state.alley,state.upgrades,state.terminal,state.discovered,state.log?.[0]?.id]);
+    const signature=JSON.stringify([tab,state.bank,state.heat,state.inventory,state.messages,state.contracts,state.orders,state.pending,state.door,state.alley,state.upgrades,state.terminal,state.discovered,state.remoteListings,state.remoteSession,state.extracted,state.log?.[0]?.id]);
     if(signature!==lastStateSignature){lastStateSignature=signature;renderPanel();}
   }
 }
@@ -133,10 +136,13 @@ function goInteract(t){
   if(!t)return;
   if(t.id==='computer')openPanel('terminal');
   else if(t.id==='garden'||t.id==='packaging'||t.id==='breaker')openStation(t.id);
+  else if(t.id==='hide'){command('hide:enter').then(r=>{notify(r.text);if(r.ok)release();});}
+  else if(t.id==='return'){command('hall:return').then(r=>notify(r.text));}
   else if(t.id==='camera')openView('alley');
   else if(t.id==='peephole')openView('peephole');
   else if(t.id==='door'||t.id==='chute'){
-    let key=t.id==='door'?'door:open':'alley:drop';
+    if(t.id==='door'){openView('peephole');return;}
+    let key='alley:drop';
     command(key).then(r=>{notify(r.text||'INTERACTION COMPLETE');});
   }
 }
@@ -147,9 +153,10 @@ function viewTerminal(){
     '<div id="terminalLog" class="terminalLog">'+termHistory.map(e=>'<div class="cmd">'+(e.cmd?'root@dead-drop:~$ '+esc(e.cmd):'')+'</div><div class="output">'+esc(e.text)+'</div>').join('')+'</div>'+
     '<form id="terminalForm" class="consoleForm"><label for="terminalInput">root@'+esc(prefix)+':~$</label><input id="terminalInput" autocomplete="off" spellcheck="false" maxlength="140" placeholder="type help"><button aria-label="Execute command">↵</button></form></div>';
 }
+function evidence(){return '<div class="section"><h3>LOCAL EVIDENCE</h3>'+state.extracted.map(x=>`<div class="listing"><div><b>${esc(x.title)}</b><small>${esc(x.from)}</small></div><button data-evidence="${esc(x.id)}" ${x.sold?'disabled':''}>${x.sold?'SOLD':'SELL $'+x.payout}</button></div>`).join('')+'</div>';}
 function market(){
   const found=state.discovered||[];
-  return '<div class="split"><div class="section"><div class="tag">EXCHANGE // RECORD MARKET</div><h3>VERIFY RECORD</h3><p>Test recovered REC-codes, then sell verified data.</p><form id="verifyForm" class="form"><input id="verifyInput" maxlength="25" placeholder="REC-XXXX-XXXX" autocomplete="off" value="'+esc(marketCode)+'"><button>VERIFY</button></form><p id="verifyResult" class="green">'+esc(marketResult)+'</p><form id="sellForm" class="form"><input id="sellInput" maxlength="25" placeholder="REC-XXXX-XXXX"><button>SELL</button></form><p id="sellResult" class="muted">'+esc(marketSale)+'</p></div>'+
+  return evidence()+'<div class="split"><div class="section"><div class="tag">EXCHANGE // RECORD MARKET</div><h3>VERIFY RECORD</h3><p>Test recovered REC-codes, then sell verified data.</p><form id="verifyForm" class="form"><input id="verifyInput" maxlength="25" placeholder="REC-XXXX-XXXX" autocomplete="off" value="'+esc(marketCode)+'"><button>VERIFY</button></form><p id="verifyResult" class="green">'+esc(marketResult)+'</p><form id="sellForm" class="form"><input id="sellInput" maxlength="25" placeholder="REC-XXXX-XXXX"><button>SELL</button></form><p id="sellResult" class="muted">'+esc(marketSale)+'</p></div>'+
     '<div class="section"><h3>RECOVERED RECORDS</h3><div class="list">'+(found.length?found.map(r=>'<div class="listing"><div><b>'+esc(r.code)+'</b><small>'+esc(r.target)+' · '+(r.sold?'SOLD':'UNVERIFIED / UNSOLD')+'</small></div><button data-verify="'+esc(r.code)+'">CHECK</button></div>').join(''):'<p>NO RECORDS YET. USE THE TERMINAL.</p>')+'</div></div></div>';
 }
 function security(){
@@ -162,7 +169,7 @@ function renderPanel(){
   const drafts=sameView?[...$('computerView').querySelectorAll('input')].map(el=>({id:el.id,value:el.value,start:el.selectionStart,end:el.selectionEnd})):[];
   lastRenderedView=tab+':'+site;
   document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('chosen',b.dataset.tab===tab));
-  const el=$('computerView');el.innerHTML=tab==='terminal'?viewTerminal():tab==='market'?market():tab==='browser'?browserView(state,site,market()):security();
+  const el=$('computerView');el.innerHTML=tab==='terminal'?viewTerminal():tab==='remote'?remoteView(state):tab==='market'?market():tab==='browser'?browserView(state,site,market()):security();
   if(tab==='terminal'){
     const form=$('terminalForm'),inp=$('terminalInput');
     form.onsubmit=async e=>{
@@ -177,6 +184,16 @@ function renderPanel(){
     };
     $('terminalLog').scrollTop=$('terminalLog').scrollHeight;inp?.focus();
   }
+  el.querySelectorAll('[data-evidence]').forEach(b=>b.onclick=async()=>{const r=await command('remote:sell',{id:b.dataset.evidence});notify(r.text);renderPanel();});
+  if(tab==='remote'){
+    const act=async(action,payload={})=>{const r=await command('remote:'+action,payload);notify(r.text);renderPanel();};
+    el.querySelectorAll('[data-port]').forEach(b=>b.onclick=()=>act('route',{port:b.dataset.port}));
+    el.querySelectorAll('[data-folder]').forEach(b=>b.onclick=()=>act('folder',{folder:b.dataset.folder}));
+    el.querySelectorAll('[data-file]').forEach(b=>b.onclick=()=>act('read',{file:b.dataset.file}));
+    el.querySelectorAll('[data-remote]').forEach(b=>b.onclick=()=>act(b.dataset.remote));
+    if($('remoteSolve'))$('remoteSolve').onsubmit=e=>{e.preventDefault();act('solve',{answer:$('remoteAnswer').value});};
+    if($('findRemote'))$('findRemote').onclick=()=>navigate('contracts');
+  }
   if(tab==='market'||(tab==='browser'&&site==='records')){
     $('verifyInput').oninput=e=>{marketCode=e.target.value;};
     $('verifyForm').onsubmit=async e=>{e.preventDefault();const code=$('verifyInput').value;marketCode=code;const r=await command('market:verify',{code});marketResult=r.text;renderPanel();};
@@ -184,6 +201,7 @@ function renderPanel(){
     document.querySelectorAll('[data-verify]').forEach(b=>b.onclick=()=>{marketCode=b.dataset.verify;$('verifyInput').value=marketCode;$('verifyForm').requestSubmit();});
   }
   if(tab==='browser'){
+    el.querySelectorAll('[data-remote-target]').forEach(b=>b.onclick=async()=>{const r=await command('remote:start',{id:b.dataset.remoteTarget});notify(r.text);if(r.ok){tab='remote';renderPanel();}});
     el.querySelectorAll('[data-buy]').forEach(b=>b.onclick=async()=>{const r=await command('buy',{item:b.dataset.buy});notify(r.text);renderPanel();});
     el.querySelectorAll('[data-site]').forEach(b=>b.onclick=()=>navigate(b.dataset.site));
     el.querySelectorAll('[data-contract]').forEach(b=>b.onclick=async()=>{const r=await command('contract:start',{id:b.dataset.contract});notify(r.text);});
@@ -248,12 +266,13 @@ function renderChallenge(){
   $('carrier').style.left=Math.max(0,Math.min(100,(now-(c.windowStart-2800))/6000*100))+'%';
 }
 const world=new World($('scene'),{
-  canMove:()=>active&&(!remote||socket?.connected)&&state?.phase==='night'&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&!state?.intrusion&&!state?.challenge,
+  canMove:()=>!state?.players.find(p=>p.id===self)?.hidden&&!(state?.players.find(p=>p.id===self)?.stunnedUntil>gameNow())&&active&&(!remote||socket?.connected)&&state?.phase==='night'&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&!state?.intrusion&&!state?.challenge,
   onLock:locked=>{if(!active)return;if(!locked&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&!state?.intrusion)$('prompt').textContent='CLICK ROOM TO LOOK · WASD MOVE';},
   onMove:pos=>{if(remote){if(socket?.connected)socket.emit('player:move',pos);}else if(local){movePlayer(local,self,pos);}},
   onFocus:focus=>{nearby=focus;if(active&&state?.phase==='night'&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&!state?.intrusion&&!state?.challenge)$('prompt').textContent=focus?'[E] '+focus.label:(document.pointerLockElement===world.renderer.domElement?'':'CLICK ROOM TO LOOK · WASD MOVE');else $('prompt').textContent='';}
 });
 window.addEventListener('keydown',async e=>{
+  if(state?.players.find(p=>p.id===self)?.hidden){if(e.code==='KeyE'||e.key==='Escape'){e.preventDefault();await command('hide:leave');}return;}
   if(state?.intrusion){
     if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyW','KeyA','KeyS','KeyD'].includes(e.code)){
       e.preventDefault();const key=e.code.startsWith('Key')?e.code.slice(3).toLowerCase():e.code;
@@ -278,7 +297,7 @@ window.__deadDropReady = true;
 setInterval(()=>{
   if(!active)return;
   if(local){tick(local);rawState();}
-  renderIntrusion();renderChallenge();if(remote)updateHud();
+  renderIntrusion();renderChallenge();if(remote)updateHud();if($('remoteClock'))$('remoteClock').textContent=Math.ceil(Math.max(0,(state.remoteSession?.expires||gameNow())-gameNow())/1000)+'s LEASE';
 },180);
 
 $('closeStation').onclick=closeStation;
@@ -291,3 +310,20 @@ for(const [id,key] of [['sensitivity','sensitivity'],['volume','volume'],['quali
 
 $('openDoorView').onclick=async()=>{const r=await command('door:open');notify(r.text);};
 $('braceDoorView').onclick=async()=>{const r=await command('door:brace');notify(r.text);};
+
+function renderHorror(){
+  const p=state.players.find(p=>p.id===self),a=state.horror.active,now=gameNow();
+  $('toggleBolt').textContent=state.horror.locked?'UNLOCK BOLT':'LOCK BOLT';
+  $('enterHall').disabled=state.horror.locked;
+  $('hiding').classList.toggle('hidden',!p?.hidden||state.phase!=='night');
+  $('hideStatus').textContent=a?.kind==='window'?'KEEP STILL / '+(a.phase==='warning'?'TAPPING AT THE GLASS':Math.ceil(Math.max(0,a.ends-now)/1000)+'s UNTIL FOOTSTEPS FADE'):'QUIET / YOU CAN LEAVE';
+  const threatText=a?({door:'LATCH RATTLING / '+(state.horror.locked?'BOLT LOCKED':'BOLT UNLOCKED'),window:a.phase==='warning'?'TAPPING AT THE WINDOW / FIND COVER':'FOOTSTEPS INSIDE / STAY HIDDEN',hall:a.phase==='warning'?'HEAVY FOOTSTEPS APPROACHING':'SHADOW IN THE HALLWAY / WAIT INSIDE',echo:'A SOUND FROM THE EMPTY ROOMS'})[a.kind]:'';
+  $('horrorStatus').textContent=threatText;$('horrorStatus').classList.toggle('hidden',!a);
+  const caught=p?.scare&&p.scare.until>now;$('scareShade').classList.toggle('hidden',!caught);
+  if(caught&&lastScare!==state.day+':'+p.scare.id){lastScare=state.day+':'+p.scare.id;closePanel();closeStation();closeView();closeGuide();release();audio.scare();notify('You were found. Catch your breath.');}
+}
+$('toggleBolt').onclick=async()=>{const r=await command(state.horror.locked?'door:unlock':'door:lock');notify(r.text);};
+$('enterHall').onclick=async()=>{const r=await command('hall:enter');notify(r.text);if(r.ok)closeView();};
+$('leaveHide').onclick=()=>command('hide:leave');
+
+$('cancelContract').onclick=()=>command('contract:cancel');
