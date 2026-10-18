@@ -20,11 +20,11 @@ export function bindDesktop(el,s,act){
     win.onpointerdown=()=>win.style.zIndex=++top;
     handle.onpointerdown=event=>{
       if(event.target.closest('button'))return;
-      event.preventDefault();handle.setPointerCapture(event.pointerId);let moved=false;
+      event.preventDefault();surface.dataset.dragging='true';handle.setPointerCapture(event.pointerId);let moved=false;
       // Keep pointer coordinates separately from saved window coordinates.
       const startX=event.clientX,startY=event.clientY,startLeft=windows[id].x,startTop=windows[id].y;
       handle.onpointermove=ev=>{moved=true;windows[id].x=Math.max(0,Math.min(surface.clientWidth-90,startLeft+ev.clientX-startX));windows[id].y=Math.max(0,Math.min(surface.clientHeight-85,startTop+ev.clientY-startY));win.style.left=windows[id].x+'px';win.style.top=windows[id].y+'px';};
-      handle.onpointerup=()=>{handle.onpointermove=null;handle.onpointerup=null;if(moved&&s.ownerActivity.active)void act('interfere');};
+      const finish=()=>{if(surface.dataset.dragging!=='true')return;surface.dataset.dragging='false';window.removeEventListener('blur',finish);handle.onpointermove=null;handle.onpointerup=null;handle.onpointercancel=null;handle.onlostpointercapture=null;if(moved)void act('interfere');};handle.onpointerup=finish;handle.onpointercancel=finish;handle.onlostpointercapture=finish;window.addEventListener('blur',finish,{once:true});
     };
   });
   el.querySelectorAll('[data-close-window]').forEach(b=>b.onclick=()=>{windows[b.dataset.closeWindow].open=false;b.closest('[data-window]').classList.add('hidden');if(s.ownerActivity.active)void act('interfere');});

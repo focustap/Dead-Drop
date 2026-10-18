@@ -82,7 +82,7 @@ function refresh(){
   const intr=panelOpen?state.intrusion:null;
   if(intr&&!lastIntrusion){audio.alarm();if(viewOpen)closeView();lastIntrusion=true;document.exitPointerLock?.();$('intrusion').classList.remove('hidden');$('panel').classList.add('hidden');notify('INTRUSION DETECTED');}
   else if(!intr&&lastIntrusion){lastIntrusion=false;$('intrusion').classList.add('hidden');if(panelOpen)$('panel').classList.remove('hidden');notify('SYSTEM RESPONSE COMPLETE');}
-  if(panelOpen&&!intr&&!inFlight){
+  if(panelOpen&&!intr&&!inFlight&&!$('computerView').querySelector('[data-dragging="true"]')){
     const signature=JSON.stringify([tab,state.bank,state.heat,state.inventory,state.messages,state.contracts,state.orders,state.pending,state.door,state.alley,state.upgrades,state.terminal,state.discovered,state.remoteListings,state.remoteSession?{...state.remoteSession,suspicion:Math.ceil(state.remoteSession.suspicion),ownerActivity:state.remoteSession.ownerActivity.phase}:null,state.exchange,state.sales,state.extracted,state.log?.[0]?.id]);
     if(signature!==lastStateSignature){lastStateSignature=signature;renderPanel();}
   }
@@ -170,7 +170,7 @@ function security(){
     '<div class="section"><div class="tag">SUPPLY ENTRANCE</div><h3>PEEPHOLE</h3><p>Walk to the supply door to use its peephole. Couriers carry a parcel.</p><div class="form"></div><p>Incoming orders: '+state.pending.length+'</p></div></div><div class="section"><h3>HIDEOUT ACTIVITY</h3><div class="list">'+state.log.slice(0,7).map(e=>'<div class="listing">'+esc(e.text)+'</div>').join('')+'</div></div>';
 }
 function renderPanel(){
-  if(!panelOpen||state?.intrusion)return;
+  if(!panelOpen||state?.intrusion||$('computerView').querySelector('[data-dragging="true"]'))return;
   const sameView=lastRenderedView===tab+':'+site,focused=document.activeElement?.id;
   const drafts=sameView?[...$('computerView').querySelectorAll('input')].map(el=>({id:el.id,value:el.value,start:el.selectionStart,end:el.selectionEnd})):[];
   lastRenderedView=tab+':'+site;
