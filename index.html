@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b1516"><title>DEAD DROP // Night Operations</title><link rel="stylesheet" href="./styles.css"></head>
+<body>
+<div id="scene" aria-label="Dead Drop 3D hideout"></div><div class="vignette"></div><div id="crosshair">+</div>
+<header id="hud" class="hidden"><div class="brand">DEAD <span>DROP</span><small>BACKROOM OPERATIONS</small></div>
+ <div class="stat">NIGHT<b id="day">1/3</b></div><div class="stat">WALLET<b id="bank">$185</b></div><div class="stat">HEAT<b id="heat">4%</b></div><div class="stat">ROOM<b id="roomCode">LOCAL</b></div><button id="openGuide" class="minor">? HELP</button></header>
+<div id="prompt"></div><div id="status"></div><div id="controls">WASD · MOVE<br>MOUSE · LOOK<br>E · INTERACT<br>ESC · EXIT VIEW</div>
+<div id="toast" role="status"></div>
+<div class="fullCover" id="lobby"><div class="lobby">
+ <div class="tag">ENCRYPTED CONNECTION // NIGHT OPERATIONS</div><h1>DEAD<br><em>DROP</em><span>.</span></h1>
+ <p>One hideout. Four workstations. Watch the door.</p>
+ <label>HANDLE<input id="playerName" maxlength="22" value="Ghost" autocomplete="nickname"></label>
+ <label>MULTIPLAYER SERVER <small>· OPTIONAL FOR SOLO</small><input id="serverUrl" placeholder="https://dead-drop-game.onrender.com"></label>
+ <label>JOIN CODE <small>· FOR TEAMMATES</small><input id="joinCode" maxlength="6" autocomplete="off" placeholder="ABC123"></label>
+ <div class="actions"><button class="primary" id="solo">SOLO NIGHT</button><button id="createRoom">HOST CO-OP</button><button id="joinRoom">JOIN ROOM</button></div>
+ <div class="micro">WASD MOVE · MOUSE LOOK · E INTERACT · TYPE HELP IN TERMINAL</div>
+ </div></div>
+<div id="panel" class="panel hidden"><header class="panelHeader"><span class="onlineDot"></span><b>DEAD DROP OS</b><span>TERMINAL NODE 01</span><button id="closePanel" aria-label="Close computer">×</button></header>
+<nav class="tabs"><button data-tab="terminal" class="chosen">TERMINAL</button><button data-tab="market">BLACK MARKET</button><button data-tab="production">PRODUCTION</button><button data-tab="security">SECURITY</button></nav>
+<div id="computerView" class="computerView"></div><footer class="panelFooter"><span>SERVER ONLINE</span><span>ESC TO LEAVE</span></footer></div>
+<div id="surveillance" class="surveillance hidden" data-view="alley" data-visitor="empty" role="dialog" aria-label="Surveillance view">
+  <div class="surveillanceFrame">
+   <div class="surveillanceHeader"><span class="liveDot"></span><b id="surveillanceName">CAM 01 // BACK ALLEY</b><span id="surveillanceStamp">00:00:00</span><button id="closeSurveillance" aria-label="Close surveillance view">× EXIT</button></div>
+   <div class="surveillanceCenter"><span>+</span></div>
+   <div class="surveillanceBottom"><span id="surveillanceInstruction">RAIN MONITORING ACTIVE</span><span id="surveillancePresence">NO ACTIVITY</span></div>
+  </div>
+</div>
+<div id="intrusion" class="fullCover intrusion hidden"><div class="breach"><div class="tag">UNAUTHORIZED CONNECTION</div><div class="skull">☠</div><h2>INTRUSION DETECTED</h2><p>ENTER THE SEQUENCE TO PROTECT YOUR WALLET</p><div id="arrows" class="arrows"></div><div class="timerTrack"><div id="timerFill"></div></div><div class="breachBottom"><span>ARROWS / WASD</span><span id="timerText">6.5s</span></div></div></div>
+<div id="guide" class="fullCover hidden"><div class="guideBox"><button class="guideClose" id="closeGuide" aria-label="Close guide">×</button><span class="tag">FIELD GUIDE</span><h2>NIGHT OPERATIONS</h2>
+  <p>WASD move · mouse look · E interact · Esc exit.</p>
+  <p>At your computer, type <code>help</code> for every terminal command. Check the alley camera for pickups and use the peephole before opening the supply door.</p>
+  <p>ARROW KEYS or WASD block intrusions. One wrong input costs wallet money.</p>
+  <button id="guideOkay" class="primary">GOT IT</button></div></div>
+<script type="module" src="./app.js"></script></body></html>
