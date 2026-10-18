@@ -3,22 +3,26 @@ import {createApp} from '../../server/index.js';
 import {visitor} from '../../shared/campaign.js';
 
 test('walk, inspect a courier, grow at the tent, carry, pack and deliver through the chute',async({page})=>{
-  test.setTimeout(120000);
+  test.setTimeout(180000);
   const game=createApp();await new Promise(r=>game.http.listen(0,'127.0.0.1',r));
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   try{
     await page.goto('/');await page.locator('#serverUrl').fill('http://127.0.0.1:'+game.http.address().port);await page.locator('#createRoom').click();
     await expect(page.locator('#lobby')).toBeHidden();if(await page.locator('#guide').isVisible())await page.locator('#guideOkay').click();
     const room=[...game.rooms.values()][0],id=Object.keys(room.players)[0];room.nextEvent=Infinity;
-    let yaw=0,pitch=0;
     const lock=async()=>{if(!await page.evaluate(()=>!!document.pointerLockElement)){await page.locator('#scene canvas').click({position:{x:500,y:400}});await page.waitForFunction(()=>!!document.pointerLockElement);}};
     const aim=async(x,z,lookPitch=0)=>{
-      await lock();const p=room.players[id],next=Math.atan2(-(x-p.x),-(z-p.z));
-      await page.evaluate(({dx,dy})=>document.dispatchEvent(new MouseEvent('mousemove',{movementX:dx,movementY:dy,bubbles:true})),{dx:(yaw-next)/.0021,dy:(pitch-lookPitch)/.0021});yaw=next;pitch=lookPitch;
-      await page.waitForTimeout(100);
+      await lock();await page.waitForTimeout(180);
+      const p=room.players[id],next=Math.atan2(-(x-p.x),-(z-p.z));
+      // Read the real yaw: Linux and Windows differ in native pointer recenter events.
+      await page.evaluate(({dx,pitch})=>{
+        document.dispatchEvent(new MouseEvent('mousemove',{movementX:dx,movementY:-10000,bubbles:true}));
+        document.dispatchEvent(new MouseEvent('mousemove',{movementX:0,movementY:(1.33-pitch)/.0021,bubbles:true}));
+      },{dx:(p.yaw-next)/.0021,pitch:lookPitch});
+      await expect.poll(()=>Math.abs(room.players[id].yaw-next),{timeout:4000}).toBeLessThan(.015);
     };
     const walk=async(x,z)=>{
-      const end=Date.now()+12000;
+      const end=Date.now()+20000;
       while(Math.hypot(room.players[id].x-x,room.players[id].z-z)>.24){
         if(Date.now()>end)throw Error('Walk stuck at '+JSON.stringify(room.players[id])+' aiming at '+x+','+z);
         await aim(x,z);await page.keyboard.down('w');await page.waitForTimeout(Math.min(300,Math.max(70,Math.hypot(room.players[id].x-x,room.players[id].z-z)/2.8*650)));await page.keyboard.up('w');await page.waitForTimeout(90);

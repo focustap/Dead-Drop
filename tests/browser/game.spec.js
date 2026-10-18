@@ -52,6 +52,8 @@ test('two clients can join the same shared room',async({browser})=>{
   const a=await browser.newPage(),b=await browser.newPage();
   await a.goto('/');await a.locator('#serverUrl').fill('http://127.0.0.1:3000');await a.locator('#createRoom').click();
   await expect(a.locator('#lobby')).toBeHidden();
+  // Exercise the low setting while two software-rendered WebGL clients share a CI runner.
+  await a.locator('#quality').selectOption('low');
   const code=await a.locator('#roomCode').textContent();expect(code).toMatch(/^[A-F0-9]{6}$/);
   await b.goto('/');await b.locator('#serverUrl').fill('http://127.0.0.1:3000');await b.locator('#joinCode').fill(code);
   await b.locator('#joinRoom').click();await expect(b.locator('#lobby')).toBeHidden();

@@ -105,7 +105,10 @@ export class World{
     this.lights.bulb=overhead;
   }
   animate(){
-    const loop=()=>{requestAnimationFrame(loop);const dt=Math.min(.2,this.clock.getDelta());
+    const loop=()=>{requestAnimationFrame(loop);
+      const frameTime=performance.now(),interval=document.hidden?250:this.callbacks.canMove?.()||this.view?1000/60:1000/15;
+      if(frameTime-(this.lastFrame||0)<interval)return;this.lastFrame=frameTime;
+      const dt=Math.min(.2,this.clock.getDelta());
       if(this.callbacks.canMove?.()&&document.pointerLockElement===this.renderer.domElement){
         const speed=this.keys.has('ShiftLeft')||this.keys.has('ShiftRight')?4:2.8;
         let forward=(this.keys.has('KeyW')?1:0)-(this.keys.has('KeyS')?1:0),side=(this.keys.has('KeyD')?1:0)-(this.keys.has('KeyA')?1:0);
@@ -113,7 +116,7 @@ export class World{
         const dx=(-Math.sin(this.yaw)*forward+Math.cos(this.yaw)*side)*dt*speed;
         const dz=(-Math.cos(this.yaw)*forward-Math.sin(this.yaw)*side)*dt*speed;
         const resolved=slide(this.pos,{x:this.pos.x+dx,z:this.pos.z+dz});this.pos.x=resolved.x;this.pos.z=resolved.z;
-        if((dx||dz)&&performance.now()-this.lastMove>75){this.lastMove=performance.now();this.callbacks.onMove?.({x:this.pos.x,z:this.pos.z,yaw:this.yaw});}
+        if((dx||dz||Math.abs((this.lastSentYaw??Infinity)-this.yaw)>.005)&&performance.now()-this.lastMove>75){this.lastMove=performance.now();this.lastSentYaw=this.yaw;this.callbacks.onMove?.({x:this.pos.x,z:this.pos.z,yaw:this.yaw});}
       }
       for(const o of this.players.values()){const moving=o.position.distanceTo(o.userData.target)>.025;o.position.lerp(o.userData.target,Math.min(1,dt*12));o.rotation.y=o.userData.yaw;o.userData.legs.forEach((leg,i)=>leg.rotation.x=moving?Math.sin(performance.now()*.008)*.4*(i?1:-1):0);}
       const now=performance.now();this.security.animate(dt,now);this.lights.bulb.intensity=this.power?35+(Math.sin(now*.0012)*1.3)+(Math.sin(now*.067)>0.989?-18:0):.5;
