@@ -30,6 +30,8 @@ export function seedRemote(r,now){
     }
     files['documents/private']={'diary.txt':pick(['The courtyard light goes out at 02:10. Someone keeps moving the bins.','If I leave the desk unattended, the screensaver stops the cursor.','The blue envelope belongs in cold storage. The red one is a decoy.'])};
     files.downloads={'invoice.tmp':'Incomplete download. Check the original signed records.','wallpaper.txt':'A photograph of a place I no longer remember.'};files['recycle bin']={'old-key.txt':'OBSOLETE key: 0000. Retained by mistake.'};
+    // Evidence order must not reveal which manifest the client should submit.
+    const vaultEntries=Object.entries(files.vault);for(let i=vaultEntries.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[vaultEntries[i],vaultEntries[j]]=[vaultEntries[j],vaultEntries[i]];}files.vault=Object.fromEntries(vaultEntries);
     r.remoteTargets[id]={id,address:'lattice://'+id.toLowerCase(),type,tier,title:{archive:'Rotated archive',investigation:'Counterfeit handoff',trace:'Three-hop dead signal'}[type],payout:Math.round((250+tier*90)*(1+(r.loop||0)*.2)),penalty:45+tier*20,files,solution,valuable,owner:null,completed:false,burned:false,strikes:0,activeOwner:Math.random()<.2,suspicion:0,expires:now+240000};
   }
 }

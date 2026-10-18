@@ -103,3 +103,9 @@ test('reaching the wardrobe before the rare stalker occupies it preserves indivi
 test('dawn closes unsold evidence without a delayed penalty against the next shift wallet',t=>{
  const c=setup(t),{r}=c,target=mount(r,'trace');act(r,'remote:solve',{answer:target.solution});act(r,'remote:folder',{folder:'vault'});act(r,'remote:read',{file:'route.bundle'});assert.equal(act(r,'remote:extract').ok,true);const bank=r.bank;r.nightEnds=c.now+1;c.advance(1);assert.equal(r.extractions[target.id].failed,true);assert.equal(r.bank,bank);act(r,'night:next');c.advance(1);assert.equal(r.bank,bank);assert.equal(act(r,'remote:sell',{id:target.id}).ok,false);assert.equal(r.bank,bank);
 });
+
+test('generated investigations vary evidence position instead of exposing the answer as the first file',t=>{
+ let seed=42;t.mock.method(Math,'random',()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;});const positions=new Set();
+ for(let i=0;i<12;i++){const r=newRoom();addPlayer(r,'a','A');act(r,'start');const target=Object.values(r.remoteTargets).find(t=>t.type==='investigation');positions.add(Object.keys(target.files.vault).findIndex(file=>'vault/'+file===target.valuable));}
+ assert.ok(positions.size>=2);
+});
