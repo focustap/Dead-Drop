@@ -4,7 +4,7 @@ import {newRoom,addPlayer,movePlayer,publicState,terminalCommand,gameAction,intr
 const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>'$'+Math.max(0,Math.floor(n||0)).toLocaleString();
-let state=null,local=null,self=null,socket=null,remote=false,tab='terminal',panelOpen=false,guideOpen=false,active=false,toastTimeout=null;
+let state=null,local=null,self=null,socket=null,remote=false,tab='terminal',panelOpen=false,guideOpen=false,viewOpen=null,active=false,toastTimeout=null;
 let termHistory=[{cmd:'',text:'DEAD DROP TERMINAL v0.1\nSYSTEM READY. Enter "help" to list commands.'}],scanBusy=false,nearby=null,lastIntrusion=false;
 let lastStateSignature='',inFlight=false;
 const notify=text=>{const e=$('toast');e.textContent=text;e.classList.add('show');clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>e.classList.remove('show'),4000);};
@@ -22,6 +22,13 @@ function updateHud(){
   $('bank').textContent=fmt(state.bank);$('heat').textContent=state.heat+'%';$('day').textContent=state.day+'/3';$('roomCode').textContent=state.code;
   let log=state.log?.[0];$('status').textContent=log?.text||'THE APARTMENT IS QUIET... FOR NOW.';
   world.setOthers(state.players,self);
+  world.setVisitors(state.alley?.visitor||'empty',state.door?.visitor||'empty');
+  if(viewOpen){
+    const v=viewOpen==='alley'?state.alley?.visitor:state.door?.visitor;
+    $('surveillance').dataset.visitor=v||'empty';
+    $('surveillancePresence').textContent=v==='empty'?'NO ACTIVITY':viewOpen==='alley'?'MOTION DETECTED':'VISITOR AT DOOR';
+    $('surveillanceStamp').textContent=new Date().toLocaleTimeString('en-GB',{hour12:false});
+  }
 }
 async function command(event,payload={}){
   if(remote){
@@ -51,7 +58,7 @@ function refresh(){
   if(!state)return;
   updateHud();
   const intr=state.intrusion;
-  if(intr&&!lastIntrusion){lastIntrusion=true;document.exitPointerLock?.();$('intrusion').classList.remove('hidden');$('panel').classList.add('hidden');notify('INTRUSION DETECTED');}
+  if(intr&&!lastIntrusion){if(viewOpen)closeView();lastIntrusion=true;document.exitPointerLock?.();$('intrusion').classList.remove('hidden');$('panel').classList.add('hidden');notify('INTRUSION DETECTED');}
   else if(!intr&&lastIntrusion){lastIntrusion=false;$('intrusion').classList.add('hidden');if(panelOpen)$('panel').classList.remove('hidden');notify('SYSTEM RESPONSE COMPLETE');}
   if(panelOpen&&!intr&&!inFlight){
     const signature=JSON.stringify([tab,state.bank,state.heat,state.inventory,state.orders,state.pending,state.door,state.alley,state.upgrades,state.terminal,state.discovered,state.log?.[0]?.id]);
@@ -90,15 +97,26 @@ function openPanel(which='terminal'){
   renderPanel();
 }
 function closePanel(){panelOpen=false;$('panel').classList.add('hidden');}
+function openView(mode){
+  if(!state||state.intrusion)return;
+  release();panelOpen=false;$('panel').classList.add('hidden');
+  viewOpen=mode;world.setView(mode);
+  const overlay=$('surveillance');overlay.classList.remove('hidden');overlay.dataset.view=mode;
+  $('surveillanceName').textContent=mode==='alley'?'CAM 01 // BACK ALLEY':'SUPPLY DOOR // PEEPHOLE';
+  $('surveillanceInstruction').textContent=mode==='alley'?'RAIN MONITORING ACTIVE':'LOOK THROUGH THE DOOR';
+  updateHud();
+}
+function closeView(){if(!viewOpen)return;viewOpen=null;world.setView(null);$('surveillance').classList.add('hidden');}
 function openGuide(){release();guideOpen=true;$('guide').classList.remove('hidden');}
 function closeGuide(){guideOpen=false;$('guide').classList.add('hidden');}
 function goInteract(t){
   if(!t)return;
   if(t.id==='computer')openPanel('terminal');
   else if(t.id==='garden')openPanel('production');
-  else if(t.id==='camera')openPanel('security');
-  else if(t.id==='peephole'||t.id==='door'||t.id==='chute'){
-    let key=t.id==='peephole'?'door:peek':t.id==='door'?'door:open':'alley:drop';
+  else if(t.id==='camera')openView('alley');
+  else if(t.id==='peephole')openView('peephole');
+  else if(t.id==='door'||t.id==='chute'){
+    let key=t.id==='door'?'door:open':'alley:drop';
     command(key).then(r=>{notify(r.text||'INTERACTION COMPLETE');});
   }
 }
@@ -122,8 +140,8 @@ function production(){
 }
 function security(){
   const alley=state.alley.visitor,door=state.door.visitor;
-  return '<div class="split"><div class="section"><div class="tag">CAM 01 // REAR ALLEY</div><h3>DROP POINT</h3><div class="camera">'+(alley==='empty'?'NO MOVEMENT DETECTED':alley==='buyer'?'◉ FIGURE WAITING': '⚠ UNIDENTIFIED FIGURE')+'<small>'+esc(alley.toUpperCase())+'</small></div><p>PACKAGED INVENTORY: '+state.inventory.packages+'</p><button id="dropFromPC">RELEASE PACKAGE</button></div>'+
-    '<div class="section"><div class="tag">CAM 02 // SERVICE ENTRANCE</div><h3>SUPPLY DOOR</h3><div class="camera">'+(door==='empty'?'HALLWAY CLEAR':door==='courier'?'◉ DELIVERY AT DOOR':'⚠ UNKNOWN VISITOR')+'<small>'+esc(door.toUpperCase())+'</small></div><p>Incoming orders: '+state.pending.length+'</p><div class="form"><button id="checkDoor">PEEPHOLE</button><button id="openDoorFromPC">OPEN DOOR</button></div></div></div><div class="section"><h3>HIDEOUT ACTIVITY</h3><div class="list">'+state.log.slice(0,7).map(e=>'<div class="listing">'+esc(e.text)+'</div>').join('')+'</div></div>';
+  return '<div class="split"><div class="section"><div class="tag">CAM 01 // REAR ALLEY</div><h3>DROP POINT</h3><p>The CCTV monitor shows a live view of the rainy alley.</p><div class="form"><button id="viewAlley">VIEW LIVE CCTV</button><button id="dropFromPC">RELEASE PACKAGE</button></div><p>PACKAGED INVENTORY: '+state.inventory.packages+'</p></div>'+
+    '<div class="section"><div class="tag">SUPPLY ENTRANCE</div><h3>PEEPHOLE</h3><p>Look through the door before letting anyone in.</p><div class="form"><button id="viewPeephole">LOOK THROUGH PEEPHOLE</button><button id="openDoorFromPC">OPEN DOOR</button></div><p>Incoming orders: '+state.pending.length+'</p></div></div><div class="section"><h3>HIDEOUT ACTIVITY</h3><div class="list">'+state.log.slice(0,7).map(e=>'<div class="listing">'+esc(e.text)+'</div>').join('')+'</div></div>';
 }
 function renderPanel(){
   if(!panelOpen||state?.intrusion)return;
@@ -155,7 +173,8 @@ function renderPanel(){
   }
   if(tab==='security'){
     const bind=(id,action)=>{if($(id))$(id).onclick=async()=>{const r=await command(action);notify(r.text);renderPanel();};};
-    bind('dropFromPC','alley:drop');bind('checkDoor','door:peek');bind('openDoorFromPC','door:open');
+    bind('dropFromPC','alley:drop');bind('openDoorFromPC','door:open');
+    $('viewAlley').onclick=()=>openView('alley');$('viewPeephole').onclick=()=>openView('peephole');
   }
 }
 function renderIntrusion(){
@@ -169,10 +188,10 @@ function renderIntrusion(){
   $('timerText').textContent=(remaining/1000).toFixed(1)+'s';
 }
 const world=new World($('scene'),{
-  canMove:()=>active&&!panelOpen&&!guideOpen&&!state?.intrusion,
-  onLock:locked=>{if(!active)return;if(!locked&&!panelOpen&&!guideOpen&&!state?.intrusion)$('prompt').textContent='CLICK ROOM TO LOOK · WASD MOVE';},
+  canMove:()=>active&&!panelOpen&&!guideOpen&&!viewOpen&&!state?.intrusion,
+  onLock:locked=>{if(!active)return;if(!locked&&!panelOpen&&!guideOpen&&!viewOpen&&!state?.intrusion)$('prompt').textContent='CLICK ROOM TO LOOK · WASD MOVE';},
   onMove:pos=>{if(remote){if(socket?.connected)socket.emit('player:move',pos);}else if(local){movePlayer(local,self,pos);}},
-  onFocus:focus=>{nearby=focus;if(active&&!panelOpen&&!guideOpen&&!state?.intrusion)$('prompt').textContent=focus?'[E] '+focus.label:(document.pointerLockElement===world.renderer.domElement?'':'CLICK ROOM TO LOOK · WASD MOVE');else $('prompt').textContent='';}
+  onFocus:focus=>{nearby=focus;if(active&&!panelOpen&&!guideOpen&&!viewOpen&&!state?.intrusion)$('prompt').textContent=focus?'[E] '+focus.label:(document.pointerLockElement===world.renderer.domElement?'':'CLICK ROOM TO LOOK · WASD MOVE');else $('prompt').textContent='';}
 });
 window.addEventListener('keydown',async e=>{
   if(state?.intrusion){
@@ -182,14 +201,16 @@ window.addEventListener('keydown',async e=>{
     }return;
   }
   if(e.key==='Escape'){
+    if(viewOpen){closeView();return;}
     if(guideOpen){closeGuide();return;}
     if(panelOpen){closePanel();return;}
     release();return;
   }
-  if(e.code==='KeyE'&&!panelOpen&&!guideOpen&&active){e.preventDefault();goInteract(nearby);}
+  if(e.code==='KeyE'&&!panelOpen&&!guideOpen&&!viewOpen&&active){e.preventDefault();goInteract(nearby);}
 });
 $('solo').onclick=()=>start('solo');$('createRoom').onclick=()=>start('create');$('joinRoom').onclick=()=>start('join');
 $('closePanel').onclick=closePanel;
+$('closeSurveillance').onclick=closeView;
 $('openGuide').onclick=openGuide;$('closeGuide').onclick=closeGuide;$('guideOkay').onclick=closeGuide;
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;lastStateSignature='';renderPanel();});
 setInterval(()=>{
