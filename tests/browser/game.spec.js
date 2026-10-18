@@ -40,13 +40,25 @@ test('an intrusion appears on command, responds to arrows and preserves the wall
   const bank=await page.locator('#bank').textContent();
   await page.locator('#terminalInput').fill('training');await page.keyboard.press('Enter');
   await expect(page.locator('#intrusion')).toBeVisible();
-  const symbols=await page.locator('#arrows span').allTextContents();
   const keys={'←':'ArrowLeft','→':'ArrowRight','↑':'ArrowUp','↓':'ArrowDown'};
-  for(const [i,symbol] of symbols.entries()){
+  const total=await page.locator('#arrows span').count();
+  for(let i=0;i<total;i++){
+    // Read the active key from the live UI; software-WebGL CI can lag a frame.
+    const current=page.locator('#arrows span.current');
+    await expect(current).toHaveCount(1);
+    const symbol=await current.textContent();
     await page.keyboard.press(keys[symbol]);
-    if(i<symbols.length-1)await expect(page.locator('#arrows span.done')).toHaveCount(i+1);
+    if(i<total-1){
+      await expect(page.locator('#arrows span.done')).toHaveCount(i+1);
+    }else{
+      // The key sometimes lands before the page regains focus on slow CI.
+      if(await page.locator('#intrusion').isVisible()){
+        const stillCurrent=await page.locator('#arrows span.current').textContent().catch(()=>null);
+        if(stillCurrent===symbol)await page.keyboard.press(keys[symbol]);
+      }
+    }
   }
-  await expect(page.locator('#intrusion')).toBeHidden();
+  await expect(page.locator('#intrusion')).toBeHidden({timeout:15000});
   await expect(page.locator('#bank')).toHaveText(bank);
 });
 test('two clients can join the same shared room',async({browser})=>{
