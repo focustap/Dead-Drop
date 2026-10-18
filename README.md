@@ -6,7 +6,7 @@ A first-person co-op horror game for one to four people. Run an underground oper
 
 The GitHub Pages build supports **SOLO NIGHT** without a backend. For co-op, deploy the included `render.yaml`, enter that service's HTTPS origin under **MULTIPLAYER SERVER**, select **HOST CO-OP**, and share the six-character room code. Joiners enter the same server origin and code.
 
-**WASD** moves relative to the camera, **mouse** looks, **Shift** runs, **E** interacts, and **Escape** exits a station/view or opens help and settings. Click the room to capture the mouse. Help contains sensitivity, volume, graphics, and **Reduce flashes, shake & audio peaks** settings, saved on that device. The night continues while menus are open.
+**WASD** moves relative to the camera, **mouse** looks, **Shift** runs, **E** interacts, and **Escape** exits a station/view or opens help and settings. Click the room to capture the mouse. Help contains sensitivity, volume, graphics, and **Reduce flashes, shake & audio peaks** settings, saved on that device. Low graphics reduces scene resolution and CCTV detail to keep inputs responsive on weaker GPUs. The night continues while menus are open.
 
 ## The operation
 

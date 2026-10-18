@@ -73,7 +73,9 @@ test('walk, inspect a courier, grow at the tent, carry, pack and deliver through
     await walk(.6,2.3);await interact(.6,2.9,'PACK HARVEST');await page.locator('[data-action="pack:deposit"]').click();await page.locator('[data-action="pack:seal"]').click();await expect.poll(()=>room.inventory.packages).toBe(1);await page.keyboard.press('Escape');
     await walk(2.3,2.6);room.horror.recoveryUntil=0;startEncounter(room,'window');room.horror.active.attackAt=Date.now()+60000;room.horror.active.ends=Date.now()+70000;
     await aim(1.95,3.3,0);await expect(page.locator('#prompt')).toContainText('CURTAINS');await expect.poll(()=>Date.now()>=room.horror.active.approachUntil,{timeout:15000}).toBe(true);await frameBarrier();await page.screenshot({path:'test-results/courtyard.png'});
-    await page.keyboard.down('e');await expect(page.locator('#curtainHold')).toBeVisible();await expect.poll(()=>room.curtains?.closed,{timeout:15000}).toBe(true);await page.keyboard.up('e');
+    // Observe authoritative completion in parallel with the slower UI round-trip.
+    // Keep the retreat visible long enough for software-rendered captures.
+    await Promise.all([page.keyboard.down('e'),expect(page.locator('#curtainHold')).toBeVisible(),expect.poll(()=>{if(room.curtains?.closed){room.horror.active.ends=Date.now()+30000;return true;}return false;},{timeout:20000}).toBe(true)]);await page.keyboard.up('e');
     expect(room.horror.active.phase).toBe('retreating');room.horror.active.ends=Date.now()+30000;await page.screenshot({path:'test-results/curtains.png'});room.horror.active.ends=Date.now()+100;await expect.poll(()=>room.horror.active).toBe(null);expect(room.players[id].scare).toBeUndefined();
     await walk(-1.8,2.3);await interact(-1.8,3.15,'WARDROBE');await expect(page.locator('#hiding')).toBeVisible();await page.locator('#leaveHide').click();
     await walk(-1.8,1.1);await walk(-1.2,-.75);await interact(-.95,-1.9,'WORKSTATION');await page.locator('[data-tab="browser"]').click();await page.locator('[data-site="sales"]').click();
