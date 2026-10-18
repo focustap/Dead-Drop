@@ -264,6 +264,13 @@ function replenish(room,now){
   seedRemote(room,now);
   seedSales(room,now);seedContracts(room,now);
 }
+export function schedulePowerOutage(room,now=Date.now(),roll=Math.random()){
+  const env=room.environment;
+  if(!env.power||env.warning||now<(env.nextOutageAt||0)||roll>=.25)return false;
+  env.warning={at:now+12000};env.nextOutageAt=now+300000;
+  log(room,'The ballast is buzzing. The fuse box is outside: check the peephole first.');
+  return true;
+}
 export function tick(room,now=Date.now()){
   if(room.phase==='collector')return tickCollector(room,now);
   if(room.phase==='breach'){
@@ -310,10 +317,7 @@ export function tick(room,now=Date.now()){
     const choice=room.policePending?'hall':pick(options);
     if(room.policePending&&startEncounter(room,'hall',now)){room.policePending=false;room.horror.active.patrol=true;}
     if(!room.horror.active&&['door','window','hall','echo'].includes(choice))startEncounter(room,choice,now);
-    else if(choice==='power'&&room.environment.power&&!room.environment.warning&&now>=room.environment.nextOutageAt&&Math.random()<.25){
-      room.environment.warning={at:now+12000};room.environment.nextOutageAt=now+300000;
-      log(room,'The ballast is buzzing. The fuse box is outside: check the peephole first.');
-    }
+    else if(choice==='power')schedulePowerOutage(room,now);
     else if(choice==='camera'){room.environment.cameraUntil=now+(room.upgrades.includes('camera')?4000:10000);log(room,'Camera signal unstable. Wait for a clear view before dropping.');}
     else if(choice==='hack'){const id=pick(Object.keys(room.players).filter(id=>room.players[id].connected&&room.players[id].computerOpen&&atComputer(room.players[id])&&!room.players[id].hidden));if(id)beginIntrusion(room,id);}
     room.nextEvent=now+Math.max(42000,78000-room.day*4500-(room.loop||0)*3000)+Math.random()*14000;
