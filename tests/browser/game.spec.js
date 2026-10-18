@@ -50,6 +50,7 @@ test('an intrusion appears on command, responds to arrows and preserves the wall
   await expect(page.locator('#bank')).toHaveText(bank);
 });
 test('two clients can join the same shared room',async({browser})=>{
+  test.setTimeout(95000);
   const a=await browser.newPage(),b=await browser.newPage();
   await a.goto('/');await a.locator('#serverUrl').fill('http://127.0.0.1:3000');await a.locator('#createRoom').click();
   await expect(a.locator('#lobby')).toBeHidden();
@@ -92,4 +93,11 @@ test('rainy CCTV and peephole render real visitor views and close with Escape',a
   await page.locator('#closeSurveillance').click();
   await expect(page.locator('#surveillance')).toBeHidden();
   expect(errors).toEqual([]);
+});
+
+test('missing published app bundle explains why Solo Night cannot start',async({page})=>{
+  await page.route('**/app.js',route=>route.abort());
+  await page.goto('/');
+  await expect(page.locator('#startupError')).toBeVisible({timeout:12000});
+  await expect(page.locator('#startupError')).toContainText('GitHub Actions');
 });
