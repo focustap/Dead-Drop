@@ -23,9 +23,18 @@ test('walk, inspect a courier, grow at the tent, carry, pack and deliver through
     };
     const walk=async(x,z)=>{
       const end=Date.now()+20000;
-      while(Math.hypot(room.players[id].x-x,room.players[id].z-z)>.24){
+      while(Math.hypot(room.players[id].x-x,room.players[id].z-z)>.32){
         if(Date.now()>end)throw Error('Walk stuck at '+JSON.stringify(room.players[id])+' aiming at '+x+','+z);
-        await aim(x,z);await page.keyboard.down('w');await page.waitForTimeout(Math.min(300,Math.max(110,Math.hypot(room.players[id].x-x,room.players[id].z-z)/2.8*650)));await page.keyboard.up('w');await page.waitForTimeout(160);
+        await aim(x,z);
+        const frames=Math.hypot(room.players[id].x-x,room.players[id].z-z)>1.8?3:1;
+        // Release in the renderer, not after a round trip to the test process. This
+        // bounds each step even when software WebGL stalls CDP on a shared runner.
+        await page.evaluate(async frames=>{
+          document.dispatchEvent(new KeyboardEvent('keydown',{key:'w',code:'KeyW',bubbles:true}));
+          for(let i=0;i<frames;i++)await new Promise(resolve=>requestAnimationFrame(resolve));
+          document.dispatchEvent(new KeyboardEvent('keyup',{key:'w',code:'KeyW',bubbles:true}));
+        },frames);
+        await page.waitForTimeout(160);
       }
     };
     const interact=async(x,z,label)=>{await aim(x,z,-.25);await expect(page.locator('#prompt')).toContainText(label);await page.keyboard.press('e');};
