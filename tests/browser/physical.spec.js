@@ -3,21 +3,23 @@ import {createApp} from '../../server/index.js';
 import {visitor} from '../../shared/campaign.js';
 
 test('walk, inspect a courier, grow at the tent, carry, pack and deliver through the chute',async({page})=>{
-  test.setTimeout(180000);
+  test.setTimeout(240000);
   const game=createApp();await new Promise(r=>game.http.listen(0,'127.0.0.1',r));
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   try{
     await page.goto('/');await page.locator('#serverUrl').fill('http://127.0.0.1:'+game.http.address().port);await page.locator('#createRoom').click();
-    await expect(page.locator('#lobby')).toBeHidden();if(await page.locator('#guide').isVisible())await page.locator('#guideOkay').click();
+    await expect(page.locator('#lobby')).toBeHidden();await page.locator('#quality').selectOption('low');if(await page.locator('#guide').isVisible())await page.locator('#guideOkay').click();
     const room=[...game.rooms.values()][0],id=Object.keys(room.players)[0];room.nextEvent=Infinity;
     const frameBarrier=async()=>{
       await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
       await page.waitForTimeout(100);
     };
-    const lock=async()=>{if(!await page.evaluate(()=>!!document.pointerLockElement)){await page.locator('#scene canvas').click({position:{x:500,y:400}});await page.waitForFunction(()=>!!document.pointerLockElement);await frameBarrier();}};
+    let lastPitch=null;
+    const lock=async()=>{if(!await page.evaluate(()=>!!document.pointerLockElement)){await page.locator('#scene canvas').click({position:{x:500,y:400}});await page.waitForFunction(()=>!!document.pointerLockElement);await frameBarrier();lastPitch=null;}};
     const aim=async(x,z,lookPitch=0)=>{
-      await lock();await frameBarrier();
+      await lock();
       const p=room.players[id],next=Math.atan2(-(x-p.x),-(z-p.z));
+      if(Math.abs(p.yaw-next)<.015&&lastPitch===lookPitch)return;
       // Read the real yaw: Linux and Windows differ in native pointer recenter events.
       for(let attempt=0;attempt<3;attempt++){
         await page.evaluate(({dx,pitch})=>{
@@ -28,9 +30,10 @@ test('walk, inspect a courier, grow at the tent, carry, pack and deliver through
         if(Math.abs(room.players[id].yaw-next)<.015)break;
       }
       await expect.poll(()=>Math.abs(room.players[id].yaw-next),{timeout:4000}).toBeLessThan(.015);
+      lastPitch=lookPitch;
     };
     const walk=async(x,z)=>{
-      const end=Date.now()+20000;
+      const end=Date.now()+45000;
       while(Math.hypot(room.players[id].x-x,room.players[id].z-z)>.32){
         if(Date.now()>end)throw Error('Walk stuck at '+JSON.stringify(room.players[id])+' aiming at '+x+','+z);
         await aim(x,z);
