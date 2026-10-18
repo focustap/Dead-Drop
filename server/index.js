@@ -6,48 +6,70 @@ import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {newRoom,addPlayer,movePlayer,publicState,terminalCommand,gameAction,intrusionInput,tick} from '../shared/core.js';
 const root=fileURLToPath(new URL('../',import.meta.url));
-export function createApp(port=Number(process.env.PORT)||3000){
- const app=express();app.disable('x-powered-by');
- app.use('/assets',express.static(path.join(root,'assets')));
- app.use('/shared',express.static(path.join(root,'shared')));
- app.get('/health',(_,res)=>res.json({ok:true}));
- app.get('/',(_,res)=>res.sendFile(path.join(root,'index.html')));
- const http=createServer(app),io=new Server(http,{maxHttpBufferSize:2048,cors:{origin:true}});
- const rooms=new Map();const socketRoom=new Map();
- const code=()=>randomBytes(3).toString('hex').toUpperCase();
- const emitRoom=room=>{for(const id of Object.keys(room.players)){const s=io.sockets.sockets.get(id);if(s)s.emit('state',publicState(room,id));}};
- const error=(ack,e)=>ack?.({ok:false,error:e.message||String(e)});
- io.on('connection',socket=>{
-   let lastMove=0;
-   socket.on('enter',(data={},ack)=>{
-     try{
-       if(socketRoom.has(socket.id))throw Error('Already in a room.');
-       const wanted=String(data.code||'').toUpperCase().trim(),requested=!!wanted;
-       let room;if(requested){room=rooms.get(wanted);if(!room)throw Error('Room not found.');}
-       else {if(rooms.size>=30)throw Error('Server full.');let c;do{c=code();}while(rooms.has(c));room=newRoom(c);rooms.set(c,room);}
-       addPlayer(room,socket.id,data.name);socketRoom.set(socket.id,room.code);socket.join(room.code);
-       ack?.({ok:true,code:room.code,id:socket.id});emitRoom(room);
-     }catch(e){error(ack,e);}
-   });
-   socket.on('move',(p={})=>{const r=rooms.get(socketRoom.get(socket.id));if(!r||Date.now()-lastMove<40)return;lastMove=Date.now();movePlayer(r,socket.id,p);io.to(r.code).emit('peers',Object.values(r.players));});
-   socket.on('command',(input,ack)=>{
-     try{const r=rooms.get(socketRoom.get(socket.id));if(!r)throw Error('Join a room.');const output=terminalCommand(r,socket.id,input);
-       ack?.({ok:true,...output});emitRoom(r);
-     }catch(e){error(ack,e);}
-   });
-   socket.on('action',(data={},ack)=>{
-     try{const r=rooms.get(socketRoom.get(socket.id));if(!r)throw Error('Join a room.');
-       const result=gameAction(r,socket.id,data.type,data.payload);ack?.(result);emitRoom(r);
-     }catch(e){error(ack,e);}
-   });
-   socket.on('defend',(key,ack)=>{
-     try{const r=rooms.get(socketRoom.get(socket.id));if(!r)throw Error('Join a room.');
-       const result=intrusionInput(r,socket.id,key);ack?.(result);emitRoom(r);
-     }catch(e){error(ack,e);}
-   });
-   socket.on('disconnect',()=>{const r=rooms.get(socketRoom.get(socket.id));if(!r)return;delete r.players[socket.id];delete r.terminals[socket.id];delete r.intrusions[socket.id];socketRoom.delete(socket.id);if(!Object.keys(r.players).length)rooms.delete(r.code);else emitRoom(r);});
- });
- const interval=setInterval(()=>{for(const room of rooms.values())if(tick(room))emitRoom(room);},300);interval.unref();
- return {app,http,io,rooms,close:async()=>{clearInterval(interval);await new Promise(resolve=>io.close(resolve));await new Promise(resolve=>http.listening?http.close(()=>resolve()):resolve());}};
+export function createApp(){
+  const app=express();app.disable('x-powered-by');
+  app.get('/health',(_req,res)=>res.json({ok:true}));
+  app.use(express.static(path.join(root,'dist')));
+  const http=createServer(app),io=new Server(http,{maxHttpBufferSize:4096});
+  const rooms=new Map(),joined=new Map();
+  const emitState=room=>{for(const player of Object.values(room.players)){
+    const s=io.sockets.sockets.get(player.id);
+    if(s)s.emit('state',publicState(room,player.id));
+  }};
+  const roomFor=socket=>{const room=rooms.get(joined.get(socket.id));if(!room)throw Error('Join a room first.');return room;};
+  const ackError=(ack,error)=>ack?.({ok:false,text:String(error.message||'Unavailable').slice(0,160)});
+  io.on('connection',socket=>{
+    socket.on('room:create',(data={},ack)=>{
+      try{
+        if(joined.has(socket.id))throw Error('Already connected to a room.');
+        if(rooms.size>=40)throw Error('Server full.');
+        let code;do{code=randomBytes(3).toString('hex').toUpperCase();}while(rooms.has(code));
+        const room=newRoom(code);addPlayer(room,socket.id,data.name);rooms.set(code,room);joined.set(socket.id,code);socket.join(code);
+        ack?.({ok:true,code,playerId:socket.id,state:publicState(room,socket.id)});emitState(room);
+      }catch(error){ackError(ack,error);}
+    });
+    socket.on('room:join',(data={},ack)=>{
+      try{
+        if(joined.has(socket.id))throw Error('Already connected to a room.');
+        const code=String(data.code||'').toUpperCase().trim();
+        const room=rooms.get(code);if(!room)throw Error('Room not found.');
+        addPlayer(room,socket.id,data.name);joined.set(socket.id,code);socket.join(code);
+        ack?.({ok:true,code,playerId:socket.id,state:publicState(room,socket.id)});emitState(room);
+      }catch(error){ackError(ack,error);}
+    });
+    let lastMove=0;
+    socket.on('player:move',position=>{
+      const room=rooms.get(joined.get(socket.id));
+      if(!room||Date.now()-lastMove<55)return;
+      lastMove=Date.now();movePlayer(room,socket.id,position);socket.to(room.code).emit('peers',Object.values(room.players));
+    });
+    socket.on('game:action',({event,payload}={},ack)=>{
+      try{
+        const room=roomFor(socket);let output;
+        if(event==='terminal')output={ok:true,...terminalCommand(room,socket.id,payload?.line)};
+        else if(event==='intrusion')output=intrusionInput(room,socket.id,payload?.key);
+        else output=gameAction(room,socket.id,event,payload);
+        ack?.(output);emitState(room);
+      }catch(error){ackError(ack,error);}
+    });
+    socket.on('disconnect',()=>{
+      const code=joined.get(socket.id);if(!code)return;
+      const room=rooms.get(code);joined.delete(socket.id);if(!room)return;
+      delete room.players[socket.id];delete room.terminals[socket.id];delete room.intrusions[socket.id];
+      if(!Object.keys(room.players).length)rooms.delete(code);
+      else emitState(room);
+    });
+  });
+  const interval=setInterval(()=>{
+    for(const room of rooms.values())if(tick(room))emitState(room);
+  },250);
+  interval.unref();
+  return {app,http,io,rooms,async close(){
+    clearInterval(interval);
+    await new Promise(resolve=>io.close(resolve));
+    if(http.listening)await new Promise(resolve=>http.close(resolve));
+  }};
 }
-if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){const a=createApp();a.http.listen(Number(process.env.PORT)||3000,'0.0.0.0',()=>console.log('Dead Drop listening'));}
+if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+  const game=createApp();game.http.listen(Number(process.env.PORT)||3000,'0.0.0.0',()=>console.log('Dead Drop online'));
+}

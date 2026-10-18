@@ -80,6 +80,7 @@ async function start(mode){
     const timeout=setTimeout(()=>{if(!conn.connected)conn.disconnect();},22000);
     conn.on('connect_error',e=>notify('CONNECTION ERROR: '+e.message.slice(0,90)));
     conn.on('state',s=>receive(s));
+    conn.on('peers',players=>world.setOthers(players,self));
     conn.on('disconnect',()=>notify('CONNECTION LOST — RECONNECTING'));
     await new Promise((resolve,reject)=>{if(conn.connected)return resolve();conn.once('connect',resolve);conn.once('connect_error',reject);});
     clearTimeout(timeout);
