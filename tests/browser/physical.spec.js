@@ -10,15 +10,23 @@ test('walk, inspect a courier, grow at the tent, carry, pack and deliver through
     await page.goto('/');await page.locator('#serverUrl').fill('http://127.0.0.1:'+game.http.address().port);await page.locator('#createRoom').click();
     await expect(page.locator('#lobby')).toBeHidden();if(await page.locator('#guide').isVisible())await page.locator('#guideOkay').click();
     const room=[...game.rooms.values()][0],id=Object.keys(room.players)[0];room.nextEvent=Infinity;
-    const lock=async()=>{if(!await page.evaluate(()=>!!document.pointerLockElement)){await page.locator('#scene canvas').click({position:{x:500,y:400}});await page.waitForFunction(()=>!!document.pointerLockElement);}};
+    const frameBarrier=async()=>{
+      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      await page.waitForTimeout(100);
+    };
+    const lock=async()=>{if(!await page.evaluate(()=>!!document.pointerLockElement)){await page.locator('#scene canvas').click({position:{x:500,y:400}});await page.waitForFunction(()=>!!document.pointerLockElement);await frameBarrier();}};
     const aim=async(x,z,lookPitch=0)=>{
-      await lock();await page.waitForTimeout(180);
+      await lock();await frameBarrier();
       const p=room.players[id],next=Math.atan2(-(x-p.x),-(z-p.z));
       // Read the real yaw: Linux and Windows differ in native pointer recenter events.
-      await page.evaluate(({dx,pitch})=>{
-        document.dispatchEvent(new MouseEvent('mousemove',{movementX:dx,movementY:-10000,bubbles:true}));
-        document.dispatchEvent(new MouseEvent('mousemove',{movementX:0,movementY:(1.33-pitch)/.0021,bubbles:true}));
-      },{dx:(p.yaw-next)/.0021,pitch:lookPitch});
+      for(let attempt=0;attempt<3;attempt++){
+        await page.evaluate(({dx,pitch})=>{
+          document.dispatchEvent(new MouseEvent('mousemove',{movementX:dx,movementY:-10000,bubbles:true}));
+          document.dispatchEvent(new MouseEvent('mousemove',{movementX:0,movementY:(1.33-pitch)/.0021,bubbles:true}));
+        },{dx:(room.players[id].yaw-next)/.0021,pitch:lookPitch});
+        await frameBarrier();
+        if(Math.abs(room.players[id].yaw-next)<.015)break;
+      }
       await expect.poll(()=>Math.abs(room.players[id].yaw-next),{timeout:4000}).toBeLessThan(.015);
     };
     const walk=async(x,z)=>{
@@ -38,7 +46,7 @@ test('walk, inspect a courier, grow at the tent, carry, pack and deliver through
       }
     };
     const interact=async(x,z,label)=>{await aim(x,z,-.25);await expect(page.locator('#prompt')).toContainText(label);await page.keyboard.press('e');};
-    await lock();await page.keyboard.press('e');await expect(page.locator('#panel')).toBeVisible();
+    await interact(-.95,-1.9,'WORKSTATION');await expect(page.locator('#panel')).toBeVisible();
     await page.locator('[data-tab="browser"]').click();await page.locator('[data-buy="seeds"]').click();await expect.poll(()=>room.pending.length).toBe(1);await page.keyboard.press('Escape');
     await walk(3.85,-.75);await walk(3.85,-1.5);
     // Set the visitor's elapsed travel time; all pickup actions still use the normal network path.
