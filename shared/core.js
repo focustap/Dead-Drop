@@ -1,7 +1,10 @@
+import {newExchange,tickExchange,exchangeAction} from './exchange.js';
+import {seedSales,salesPublic,salesAction,tickSales} from './sales.js';
+import {seedContracts,contractAction,tickContracts} from './contracts.js';
 import {seedRemote,remotePublic,remoteAction,tickRemote} from './remote.js';
 import {newHorror,startEncounter,tickHorror,horrorAction,openedIntruder} from './horror.js';
 import {slide,atStation,atComputer} from './layout.js';
-import {NIGHT_MS,QUOTAS,CATALOG,ledger,earn,spend,income,visitor,phase,clue,finishNight,nextNight,tickCollector,nightsRemaining} from './campaign.js';
+import {NIGHT_MS,QUOTAS,CATALOG,ledger,earn,spend,income,visitor,phase,clue,finishNight,nextNight,tickCollector,tickEnding,endingAction,nightsRemaining} from './campaign.js';
 // Dead Drop's complete simulated game state. No real networks, accounts, or personal data.
 const PRODUCTS = Object.freeze({
   CARD:{name:'Payment record',base:85}, ID:{name:'Identity record',base:115},
@@ -34,7 +37,7 @@ function makeTarget(name,i,registry){
 export function newRoom(code='LOCAL'){
   const records={},targets=Object.fromEntries(TARGET_NAMES.map((n,i)=>[n,makeTarget(n,i,records)]));
   const now=Date.now();
-  return {code,created:now,started:false,phase:'lobby',day:1,quota:QUOTAS[0],bank:185,heat:4,upgrades:[],players:{},terminals:{},intrusions:{},challenges:{},
+  return {exchange:newExchange(now),sales:{buyers:[],deals:[],listed:0,next:0},loop:0,ending:null,code,created:now,started:false,phase:'lobby',day:1,quota:QUOTAS[0],bank:185,heat:4,upgrades:[],players:{},terminals:{},intrusions:{},challenges:{},
     targets,records,remoteTargets:{},remoteSessions:{},extractions:{},scans:0,targetSerial:4,ledger:ledger(),cycleEarned:0,cycleRequired:QUOTAS[0],settlements:{},collector:null,curtains:null,history:[],summary:null,
     inventory:{seeds:0,soil:2,buds:0,wrap:2,packages:0},garden:{soil:false,planted:false,moisture:0,growth:0,light:true},
     pending:[],orders:[],contracts:[],messages:[],alley:{visitor:'empty',next:now+14000},door:{visitor:'empty',next:now+23000},nightEnds:now+NIGHT_MS,
@@ -58,8 +61,8 @@ export function movePlayer(room,id,p,now=Date.now()){
   Object.assign(player,resolved,{yaw:p.yaw,lastMove:now});
 }
 export function publicState(room,id){
-  const {targets,records,terminals,intrusions,challenges,remoteTargets,remoteSessions,extractions,...rest}=room;
-  return {...rest,...remotePublic(room,id),nightsRemaining:room.phase==='night'?nightsRemaining(room.day):(room.summary?.nightsRemaining??nightsRemaining(room.day)),now:Date.now(),earnings:income(room),alley:{...room.alley,phase:phase(room.alley,Date.now()),clue:clue(room.alley,Date.now())},door:{...room.door,phase:phase(room.door,Date.now()),clue:clue(room.door,Date.now())},players:Object.values(room.players).map(({lastMove,...p})=>p),challenge:challenges[id]||null,terminal:terminals[id]||null,intrusion:intrusions[id]||null,
+  const {targets,records,terminals,intrusions,challenges,remoteTargets,remoteSessions,extractions,sales,...rest}=room;
+  return {...rest,sales:salesPublic(room),...remotePublic(room,id),nightsRemaining:room.phase==='night'?nightsRemaining(room.day):(room.summary?.nightsRemaining??nightsRemaining(room.day)),now:Date.now(),earnings:income(room),alley:{...room.alley,phase:phase(room.alley,Date.now()),clue:clue(room.alley,Date.now())},door:{...room.door,phase:phase(room.door,Date.now()),clue:clue(room.door,Date.now())},players:Object.values(room.players).map(({lastMove,...p})=>p),challenge:challenges[id]||null,terminal:terminals[id]||null,intrusion:intrusions[id]||null,
     discovered:Object.entries(records).filter(([,r])=>r.discovered).map(([code,r])=>({code,kind:r.kind,sold:r.sold,value:r.value,target:r.target})),
     targets:Object.keys(targets),targetInfo:Object.values(targets).map(({name,tier,job})=>({name,tier,job}))};
 }
@@ -161,6 +164,7 @@ export function gameAction(room,id,action,payload={}){
   const now=Date.now(),p=room.players[id];payload=payload||{};
   if(!p)return fail('Player missing.');
   if(action==='computer:leave'){endComputer(room,id);return {ok:true,text:'Workstation closed.'};}
+  if(action==='ending:vote'){const result=endingAction(room,id,payload,now);if(room.phase==='night')replenish(room,now);return result;}
   if(action==='start'){
     if(room.phase!=='lobby')return fail('Shift already started.');
     room.started=true;room.phase='night';room.nightEnds=now+NIGHT_MS;room.lastTick=now;
@@ -184,11 +188,12 @@ export function gameAction(room,id,action,payload={}){
   const station=action.startsWith('garden:')?'garden':action.startsWith('pack:')?'packaging':action.startsWith('door:')?'door':action==='alley:drop'?'chute':action==='breaker:reset'?'breaker':null;
   if(station&&!atStation(p,station))return fail('Walk to the '+station+' first.');
   if(action==='breaker:reset'&&p.zone!=='hall')return fail('The fuse box is outside in the hallway.');
-  const digital=['buy','market:verify','market:sell','contract:start','contract:input'];
-  if((digital.includes(action)||action.startsWith('remote:'))&&!room.environment.power)return fail('NO POWER. Reset the breaker.');
-  if((digital.includes(action)||action.startsWith('remote:'))&&room.intrusions[id])return fail('Repel the intrusion first.');
-  if(action==='contract:cancel'){const c=room.challenges[id];if(c){const j=room.contracts.find(j=>j.id===c.id);if(j){j.owner=null;j.expires=now;}delete room.challenges[id];}return {ok:true,text:'Connection abandoned.'};}
-  const remote=remoteAction(room,id,action,payload,now);if(remote)return remote;
+  const digital=['buy','market:verify','market:sell'];
+  const isDigital=digital.includes(action)||/^(remote:|contract:|exchange:|sales:)/.test(action);
+  if(isDigital&&(p.hidden||p.zone==='hall'))return fail('Return to the workstation.');
+  if(isDigital&&!room.environment.power)return fail('NO POWER. Reset the breaker.');
+  if(isDigital&&room.intrusions[id])return fail('Repel the intrusion first.');
+  for(const handler of [exchangeAction,contractAction,remoteAction,salesAction]){const result=handler(room,id,action,payload,now);if(result)return result;}
   let message='';
   if(action==='market:verify'||action==='market:sell'){
     const code=String(payload.code||'').trim().toUpperCase(),r=room.records[code];
@@ -234,17 +239,6 @@ export function gameAction(room,id,action,payload={}){
   }else if(action==='pack:seal'){
     if(room.inventory.buds<1||room.inventory.wrap<1)return fail('Needs harvest and sealing sleeves.');
     room.inventory.buds--;room.inventory.wrap--;room.inventory.packages++;message='Folded. Sealed. Ready for the chute.';
-  }else if(action==='alley:drop'){
-    if(!room.inventory.packages)return fail('No sealed packages.');
-    if(phase(room.alley,now)!=='waiting')return fail('Wait until someone reaches the tray.');
-    room.inventory.packages--;
-    if(room.alley.visitor==='buyer'){
-      const order=room.orders.find(o=>!o.completed&&o.expires>now);
-      const amount=order?.payout||190+room.day*20;
-      if(order)order.completed=true;earn(room,'deliveries',amount);message='Pickup confirmed. +$'+amount+'.';
-      room.alley.outcome='pickup';
-    }else{room.ledger.losses+=0;room.shipmentsLost=(room.shipmentsLost||0)+1;room.heat=clamp(room.heat+10,0,100);message='The package disappeared. No payment received.';room.alley.outcome='theft';}
-    room.alley.leaveAt=now;room.alley.next=now+6000;
   }else if(action==='door:peek')return {ok:true,text:clue(room.door,now)};
   else if(action==='door:open'){
     if(phase(room.door,now)!=='waiting')return fail('Nobody is waiting at the door.');
@@ -262,41 +256,23 @@ export function gameAction(room,id,action,payload={}){
     room.door.leaveAt=now;room.door.next=now+6000;room.heat=Math.max(0,room.heat-3);message='Chain secured. The footsteps retreat.';
   }else if(action==='breaker:reset'){
     room.environment.power=true;room.environment.warning=null;message='Breaker reset. Power restored.';
-  }else if(action==='contract:start'){
-    if(room.challenges[id]||room.remoteSessions[id])return fail('Finish the current connection first.');
-    const c=room.contracts.find(c=>c.id===payload.id);
-    if(!c||c.completed||c.expires<=now||c.owner)return fail('Contract unavailable.');
-    c.owner=id;
-    room.challenges[id]={id:c.id,type:c.type,expires:now+22000,index:0,sequence:Array.from({length:4+Math.floor(room.day/2)},()=>pick(['1','2','3','4'])),revealUntil:now+3000,windowStart:now+2800,windowEnd:now+3800};
-    message=c.type==='memory'?'Remember the sequence. Repeat after the signal clears.':'Stop the carrier in the green band.';
-  }else if(action==='contract:input'){
-    const c=room.challenges[id];if(!c)return fail('No active contract.');
-    const job=room.contracts.find(j=>j.id===c.id);
-    if(!job||job.completed)return fail('Contract closed.');
-    if(c.type==='memory'&&now<c.revealUntil)return fail('Wait for the signal to clear.');
-    const correct=now<=c.expires&&(c.type==='memory'?String(payload.key)===c.sequence[c.index]:now>=c.windowStart&&now<=c.windowEnd);
-    if(!correct){delete room.challenges[id];job.owner=null;job.expires=now;room.heat=clamp(room.heat+5,0,100);return fail('Signal lost. Contract burned.');}
-    c.index++;
-    if(c.type==='pulse'||c.index===c.sequence.length){job.completed=true;earn(room,'contracts',job.payout);delete room.challenges[id];message='Contract cleared. +$'+job.payout+'.';}
-    else return {ok:true,text:'Packet accepted.'};
   }else return fail('Unknown interaction.');
   if(station)p.activity={id:uid(),action,until:now+900};
   log(room,message);return {ok:true,text:message};
 }
 function replenish(room,now){
   seedRemote(room,now);
-  room.orders=room.orders.filter(o=>!o.completed&&o.expires>now);
-  while(room.orders.length<3)room.orders.push({id:uid(),payout:190+room.day*20,expires:now+100000,completed:false});
-  room.contracts=room.contracts.filter(c=>(!c.completed&&c.expires>now)||c.owner&&room.challenges[c.owner]);
-  while(room.contracts.length<3)room.contracts.push({id:uid(),type:room.contracts.length%2?'pulse':'memory',title:pick(['Recover a cold archive','Rebuild a relay key','Intercept a dead signal']),payout:100+room.day*35,expires:now+110000,completed:false,owner:null});
+  seedSales(room,now);seedContracts(room,now);
 }
 export function tick(room,now=Date.now()){
   if(room.phase==='collector')return tickCollector(room,now);
+  if(room.phase==='ending'){const result=tickEnding(room,now);if(room.phase==='night')replenish(room,now);return result;}
   if(room.phase!=='night')return false;
   if(now>=room.nightEnds){finishNight(room,room.nightEnds);return true;}
   const elapsed=Math.max(0,now-room.lastTick),dt=Math.min(elapsed,2000)/1000;room.lastTick=now;
   tickRemote(room,now,elapsed);
   tickHorror(room,now);
+  tickExchange(room,now);tickContracts(room,now,elapsed);tickSales(room,now,elapsed);
   const g=room.garden;
   if(g.planted){
     if(g.moisture>0&&g.light&&room.environment.power)g.growth=Math.min(100,g.growth+dt*100/(room.upgrades.includes('lamp')?42:60));
@@ -309,7 +285,7 @@ export function tick(room,now=Date.now()){
     const was=room[key].visitor;
     if(was!=='empty'){room[key]={visitor:'empty',next:now+7000};}
     else{
-      const kind=key==='alley'?pick(['buyer','buyer','thief']):room.pending.length?'courier':'empty';
+      const kind=key==='alley'?pick(['thief','stranger','police','searcher','pedestrian']):room.pending.length?'courier':'empty';
       room[key]=kind==='empty'?{visitor:'empty',next:now+20000}:visitor(kind,now,key);
       if(kind!=='empty')log(room,key==='door'?'Footsteps in the hallway. Check the peephole.':'Movement near the dead drop.');
     }
@@ -325,12 +301,13 @@ export function tick(room,now=Date.now()){
   if(room.environment.warning&&now>=room.environment.warning.at){room.environment.power=false;room.environment.warning=null;log(room,'POWER LOST. Reset the breaker in the hallway.');}
   if(now>=room.nextEvent&&!room.horror.active&&now>=room.horror.recoveryUntil&&!Object.keys(room.intrusions).length){
     const options=room.day===1?['door','echo','power','camera','hack']:['door','window','hall','echo','power','camera','hack'];
-    const choice=pick(options);
-    if(['door','window','hall','echo'].includes(choice))startEncounter(room,choice,now);
+    const choice=room.policePending?'hall':pick(options);
+    if(room.policePending&&startEncounter(room,'hall',now)){room.policePending=false;room.horror.active.patrol=true;}
+    if(!room.horror.active&&['door','window','hall','echo'].includes(choice))startEncounter(room,choice,now);
     else if(choice==='power'&&room.environment.power){room.environment.warning={at:now+12000};log(room,'The ballast is buzzing. The fuse box is outside: check the peephole first.');}
     else if(choice==='camera'){room.environment.cameraUntil=now+(room.upgrades.includes('camera')?4000:10000);log(room,'Camera signal unstable. Wait for a clear view before dropping.');}
     else if(choice==='hack'){const id=pick(Object.keys(room.players).filter(id=>room.players[id].connected&&room.players[id].computerOpen&&atComputer(room.players[id])&&!room.players[id].hidden));if(id)beginIntrusion(room,id);}
-    room.nextEvent=now+Math.max(42000,78000-room.day*4500)+Math.random()*14000;
+    room.nextEvent=now+Math.max(42000,78000-room.day*4500-(room.loop||0)*3000)+Math.random()*14000;
   }
   return true;
 }
