@@ -56,3 +56,36 @@ test('two clients can join the same shared room',async({browser})=>{
   await expect(a.locator('#bank')).toHaveText(await b.locator('#bank').textContent());
   await a.close();await b.close();
 });
+
+test('rainy CCTV and peephole render real visitor views and close with Escape',async({page})=>{
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('/');await page.locator('#solo').click();
+  if(await page.locator('#guide').isVisible())await page.locator('#guideOkay').click();
+  const vp=page.viewportSize();await page.mouse.click(vp.width/2,vp.height/2);
+  await expect(page.locator('#prompt')).toContainText('WORKSTATION',{timeout:15000});
+  await page.keyboard.press('e');await expect(page.locator('#panel')).toBeVisible();
+  await page.locator('[data-tab="production"]').click();
+  await page.locator('[data-buy="seeds"]').click();
+  await page.locator('[data-tab="security"]').click();
+  await expect(page.locator('#viewAlley')).toBeVisible();
+  await expect(page.locator('.camera')).toHaveCount(0);
+  await page.locator('#viewAlley').click();
+  await expect(page.locator('#surveillance')).toBeVisible();
+  await expect(page.locator('#surveillance')).toHaveAttribute('data-view','alley');
+  await expect(page.locator('#surveillanceName')).toContainText('BACK ALLEY');
+  await expect(page.locator('#scene canvas')).toBeVisible();
+  await page.screenshot({path:'test-results/alley-cctv.png'});
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#surveillance')).toBeHidden();
+  await page.keyboard.press('e');await expect(page.locator('#panel')).toBeVisible();
+  await page.locator('[data-tab="security"]').click();
+  await page.locator('#viewPeephole').click();
+  await expect(page.locator('#surveillance')).toBeVisible();
+  await expect(page.locator('#surveillance')).toHaveAttribute('data-view','peephole');
+  await expect(page.locator('#surveillance')).toHaveAttribute('data-visitor','courier');
+  await expect(page.locator('#surveillanceName')).toContainText('PEEPHOLE');
+  await page.screenshot({path:'test-results/hallway-peephole.png'});
+  await page.locator('#closeSurveillance').click();
+  await expect(page.locator('#surveillance')).toBeHidden();
+  expect(errors).toEqual([]);
+});

@@ -47,3 +47,9 @@ Open `http://localhost:3000/`.
 
 ## Deployment
 GitHub Pages builds from `.github/workflows/pages.yml`. Set Pages **Build and deployment** source to **GitHub Actions** if not already enabled. Render uses `render.yaml` for a new service. Render Free may sleep when inactive and rooms are currently kept in memory.
+
+## Alley CCTV and supply peephole
+
+The CCTV monitor on the apartment wall displays a live 3D view of the wet alley with animated rain and whoever is waiting at the dead drop. Press **E** beside the monitor for a fullscreen surveillance view. The **Security** computer app also has **View Live CCTV**.
+
+Press **E** beside the supply door's peephole to look into the 3D corridor. Couriers and intruders appear outside as visible characters; the peephole uses a wide-angle circular vignette. You can also select **Look Through Peephole** in Security. Use **Esc** or **× Exit** to return to your room. Both feeds reflect the shared room state across co-op players.
