@@ -63,6 +63,8 @@ test('two clients can join the same shared room',async({browser})=>{
 });
 
 test('browser navigates distinct sites and live CCTV returns to the apartment',async({page})=>{
+  // Several real 3D views and screenshots exceed 50s on software-rendered CI.
+  test.setTimeout(95000);
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('/');await page.locator('#solo').click();if(await page.locator('#guide').isVisible())await page.locator('#guideOkay').click();
   const vp=page.viewportSize();await page.mouse.click(vp.width/2,vp.height/2);await page.keyboard.press('e');
