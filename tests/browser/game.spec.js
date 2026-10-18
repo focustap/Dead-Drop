@@ -21,7 +21,14 @@ test('solo game boots a real WebGL room, and terminal help and market work',asyn
   await page.locator('#terminalInput').fill('cd finances');await page.keyboard.press('Enter');
   await expect(page.locator('#terminalLog')).toContainText('Current directory: /finances');
   await page.locator('#terminalInput').fill('scrape');await page.keyboard.press('Enter');
-  await expect(page.locator('#terminalLog')).toContainText('Check possible records');
+  await expect(page.locator('.scrapeStatus')).toContainText('SCRAPING NOVA-17:/finances');
+  await expect(page.locator('#terminalLog')).toContainText('Please wait 10 seconds');
+  await page.locator('#terminalInput').fill('scrape documents');await page.keyboard.press('Enter');
+  await expect(page.locator('#terminalLog')).toContainText('SCAN IN PROGRESS');
+  await expect(page.locator('#terminalLog')).toContainText('Check possible records',{timeout:17000});
+  await expect(page.locator('.scrapeStatus')).toBeHidden();
+  await page.locator('#terminalInput').fill('scrape documents');await page.keyboard.press('Enter');
+  await expect(page.locator('.scrapeStatus')).toContainText('SCRAPING NOVA-17:/documents');
   const code=(await page.locator('#terminalLog').textContent()).match(/REC-[A-Z0-9]{4}-[A-Z0-9]{4}/)?.[0];
   expect(code).toBeTruthy();
   await page.locator('[data-tab="market"]').click();
