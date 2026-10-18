@@ -480,3 +480,13 @@ body:has(.surveillance:not(.hidden)) #hud,body:has(.surveillance:not(.hidden)) #
 .site-market button:focus-visible{outline:2px solid #daffc2;outline-offset:2px}
 @media(max-width:900px){.njProducts{grid-template-columns:1fr}.njSymbol{height:100px}.njProductInfo{padding-bottom:3px}.njProductBuy{margin-top:9px}.njMark{display:none}}
 @media(max-width:600px){.njHero{padding:21px}.njShelf{padding:16px}.njSectionHead{flex-direction:column;align-items:start}.njInstructions{grid-template-columns:1fr}}
+
+
+/* Timed terminal scrape: progress reflects the server-owned scan, never a client-only payout. */
+.scrapeStatus{border:1px solid #628c83;background:linear-gradient(100deg,#132822,#1e302c);padding:13px 15px;margin:0 14px 13px;color:#c9ead8;font:10px var(--mono);letter-spacing:.04em}
+.scrapeStatus>div:first-child{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.scrapeStatus strong{font:700 11px var(--mono);color:#b5ead1}
+.scrapeStatus>div:first-child span{color:#e6d8af;font-variant-numeric:tabular-nums}
+.scrapeTrack{height:6px;background:#263831;border:1px solid #415c50;margin:12px 0 9px;overflow:hidden}
+.scrapeTrack i{display:block;height:100%;width:0;background:linear-gradient(90deg,#65a895,#c6e4be);transition:width .15s linear}
+.scrapeStatus small{color:#9eb9ad;font:9px/1.6 var(--mono)}
