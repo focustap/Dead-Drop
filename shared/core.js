@@ -1,7 +1,7 @@
 import {seedRemote,remotePublic,remoteAction,tickRemote} from './remote.js';
 import {newHorror,startEncounter,tickHorror,horrorAction,openedIntruder} from './horror.js';
-import {slide,atStation} from './layout.js';
-import {NIGHT_MS,QUOTAS,CATALOG,ledger,earn,spend,income,visitor,phase,clue,finishNight,nextNight} from './campaign.js';
+import {slide,atStation,atComputer} from './layout.js';
+import {NIGHT_MS,QUOTAS,CATALOG,ledger,earn,spend,income,visitor,phase,clue,finishNight,nextNight,tickCollector,nightsRemaining} from './campaign.js';
 // Dead Drop's complete simulated game state. No real networks, accounts, or personal data.
 const PRODUCTS = Object.freeze({
   CARD:{name:'Payment record',base:85}, ID:{name:'Identity record',base:115},
@@ -35,7 +35,7 @@ export function newRoom(code='LOCAL'){
   const records={},targets=Object.fromEntries(TARGET_NAMES.map((n,i)=>[n,makeTarget(n,i,records)]));
   const now=Date.now();
   return {code,created:now,started:false,phase:'lobby',day:1,quota:QUOTAS[0],bank:185,heat:4,upgrades:[],players:{},terminals:{},intrusions:{},challenges:{},
-    targets,records,remoteTargets:{},remoteSessions:{},extractions:{},scans:0,targetSerial:4,ledger:ledger(),cycleEarned:0,cycleRequired:0,history:[],summary:null,
+    targets,records,remoteTargets:{},remoteSessions:{},extractions:{},scans:0,targetSerial:4,ledger:ledger(),cycleEarned:0,cycleRequired:QUOTAS[0],settlements:{},collector:null,curtains:null,history:[],summary:null,
     inventory:{seeds:0,soil:2,buds:0,wrap:2,packages:0},garden:{soil:false,planted:false,moisture:0,growth:0,light:true},
     pending:[],orders:[],contracts:[],messages:[],alley:{visitor:'empty',next:now+14000},door:{visitor:'empty',next:now+23000},nightEnds:now+NIGHT_MS,
     horror:newHorror(now),nextHack:now+75000,environment:{power:true,warning:null,cameraUntil:0},lastTick:now,nextTarget:now+40000,nextEvent:now+45000,
@@ -44,26 +44,29 @@ export function newRoom(code='LOCAL'){
 export function addPlayer(room,id,name){
   const count=Object.keys(room.players).length;
   if(count>=4)throw Error('The hideout is full (4 players).');
-  room.players[id]={id,name:String(name||'Runner').trim().slice(0,22)||'Runner',x:-1.2+(count%2)*2.2,z:-.75+Math.floor(count/2)*1.4,yaw:0,lastMove:Date.now(),connected:true,carrying:0,zone:'apartment',hidden:false,stunnedUntil:0,safeUntil:room.horror.active?Date.now()+12000:0};
+  room.players[id]={id,name:String(name||'Runner').trim().slice(0,22)||'Runner',x:-1.2+(count%2)*2.2,z:-.75+Math.floor(count/2)*1.4,yaw:0,lastMove:Date.now(),connected:true,computerOpen:false,carrying:0,zone:'apartment',hidden:false,stunnedUntil:0,safeUntil:room.horror.active?Date.now()+12000:0};
   room.terminals[id]={target:null,cwd:'/',seen:[]};log(room,room.players[id].name+' entered the hideout.');
 }
 export function movePlayer(room,id,p,now=Date.now()){
   const player=room.players[id];if(!player||room.phase!=='night')return;
-  if(player.hidden||player.stunnedUntil>now)return;
+  if(player.hidden||player.stunnedUntil>now||room.curtains?.owner===id&&!room.curtains.closed)return;
   if(!Number.isFinite(p?.x)||!Number.isFinite(p?.z)||!Number.isFinite(p?.yaw))return;
   const max=Math.min(.8,Math.max(.015,(now-player.lastMove)/1000)*4.2);
   const distance=Math.hypot(p.x-player.x,p.z-player.z),ratio=distance>max?max/distance:1;
   const resolved=slide(player,{x:player.x+(p.x-player.x)*ratio,z:player.z+(p.z-player.z)*ratio},player.zone);
+  if(player.computerOpen&&Math.hypot(resolved.x-player.x,resolved.z-player.z)>.01)endComputer(room,id);
   Object.assign(player,resolved,{yaw:p.yaw,lastMove:now});
 }
 export function publicState(room,id){
   const {targets,records,terminals,intrusions,challenges,remoteTargets,remoteSessions,extractions,...rest}=room;
-  return {...rest,...remotePublic(room,id),now:Date.now(),earnings:income(room),alley:{...room.alley,phase:phase(room.alley,Date.now()),clue:clue(room.alley,Date.now())},door:{...room.door,phase:phase(room.door,Date.now()),clue:clue(room.door,Date.now())},players:Object.values(room.players).map(({lastMove,...p})=>p),challenge:challenges[id]||null,terminal:terminals[id]||null,intrusion:intrusions[id]||null,
+  return {...rest,...remotePublic(room,id),nightsRemaining:room.phase==='night'?nightsRemaining(room.day):(room.summary?.nightsRemaining??nightsRemaining(room.day)),now:Date.now(),earnings:income(room),alley:{...room.alley,phase:phase(room.alley,Date.now()),clue:clue(room.alley,Date.now())},door:{...room.door,phase:phase(room.door,Date.now()),clue:clue(room.door,Date.now())},players:Object.values(room.players).map(({lastMove,...p})=>p),challenge:challenges[id]||null,terminal:terminals[id]||null,intrusion:intrusions[id]||null,
     discovered:Object.entries(records).filter(([,r])=>r.discovered).map(([code,r])=>({code,kind:r.kind,sold:r.sold,value:r.value,target:r.target})),
     targets:Object.keys(targets),targetInfo:Object.values(targets).map(({name,tier,job})=>({name,tier,job}))};
 }
 export function beginIntrusion(room,id,training=false){
-  if(room.intrusions[id] || !room.players[id])return false;
+  const player=room.players[id];
+  if(room.phase!=='night'||!player?.computerOpen||!player.connected||!atComputer(player)||player.hidden||player.stunnedUntil>Date.now()||!room.environment.power)return false;
+  if(room.intrusions[id])return false;
   if(room.horror?.active)return false;
   if(!training&&(Date.now()<(room.nextHack||0)||Date.now()<(room.horror?.recoveryUntil||0)||room.horror?.active||Object.keys(room.intrusions).length))return false;
   if(!training)room.nextHack=Date.now()+90000;
@@ -78,6 +81,12 @@ function loseIntrusion(room,id){
   const loss=Math.min(room.bank,Math.ceil(room.bank*(room.upgrades.includes('vault')?.06:.18)));
   spend(room,loss,true);room.heat=clamp(room.heat+8,0,100);
   log(room,room.players[id]?.name+' was breached. $'+loss+' drained from the digital wallet.');
+}
+export function endComputer(room,id){
+  const p=room.players[id];if(!p)return;
+  p.computerOpen=false;
+  if(room.intrusions[id]?.training)delete room.intrusions[id];
+  else if(room.intrusions[id])loseIntrusion(room,id);
 }
 export function intrusionInput(room,id,key){
   const a=room.intrusions[id];if(!a)return {ok:false,text:'No intrusion in progress.'};
@@ -151,6 +160,7 @@ const fail=text=>({ok:false,text});
 export function gameAction(room,id,action,payload={}){
   const now=Date.now(),p=room.players[id];payload=payload||{};
   if(!p)return fail('Player missing.');
+  if(action==='computer:leave'){endComputer(room,id);return {ok:true,text:'Workstation closed.'};}
   if(action==='start'){
     if(room.phase!=='lobby')return fail('Shift already started.');
     room.started=true;room.phase='night';room.nightEnds=now+NIGHT_MS;room.lastTick=now;
@@ -162,8 +172,14 @@ export function gameAction(room,id,action,payload={}){
   }
   if(room.phase!=='night')return fail('The shift is closed.');
   if(now>=room.nightEnds){tick(room,now);return fail('Dawn. Review the shift ledger.');}
+  if(action==='computer:enter'){
+    if(!atComputer(p)||p.hidden||p.stunnedUntil>now)return fail('Reach a workstation first.');
+    p.computerOpen=true;return {ok:true,text:'Workstation online.'};
+  }
+  if(room.curtains?.owner===id&&!action.startsWith('curtain:'))horrorAction(room,p,'curtain:release',now);
   if(p.stunnedUntil>now)return fail('Catch your breath.');
   if(p.hidden&&action!=='hide:leave')return fail('Leave the wardrobe first.');
+  if(/^(hide:|hall:|curtain:|garden:|pack:|door:|breaker:|alley:)/.test(action)&&p.computerOpen)endComputer(room,id);
   const physical=horrorAction(room,p,action,now);if(physical)return physical;
   const station=action.startsWith('garden:')?'garden':action.startsWith('pack:')?'packaging':action.startsWith('door:')?'door':action==='alley:drop'?'chute':action==='breaker:reset'?'breaker':null;
   if(station&&!atStation(p,station))return fail('Walk to the '+station+' first.');
@@ -275,6 +291,7 @@ function replenish(room,now){
   while(room.contracts.length<3)room.contracts.push({id:uid(),type:room.contracts.length%2?'pulse':'memory',title:pick(['Recover a cold archive','Rebuild a relay key','Intercept a dead signal']),payout:100+room.day*35,expires:now+110000,completed:false,owner:null});
 }
 export function tick(room,now=Date.now()){
+  if(room.phase==='collector')return tickCollector(room,now);
   if(room.phase!=='night')return false;
   if(now>=room.nightEnds){finishNight(room,room.nightEnds);return true;}
   const elapsed=Math.max(0,now-room.lastTick),dt=Math.min(elapsed,2000)/1000;room.lastTick=now;
@@ -312,7 +329,7 @@ export function tick(room,now=Date.now()){
     if(['door','window','hall','echo'].includes(choice))startEncounter(room,choice,now);
     else if(choice==='power'&&room.environment.power){room.environment.warning={at:now+12000};log(room,'The ballast is buzzing. The fuse box is outside: check the peephole first.');}
     else if(choice==='camera'){room.environment.cameraUntil=now+(room.upgrades.includes('camera')?4000:10000);log(room,'Camera signal unstable. Wait for a clear view before dropping.');}
-    else if(choice==='hack'){const id=pick(Object.keys(room.players).filter(id=>room.players[id].connected&&!room.players[id].hidden&&room.players[id].zone!=='hall'));if(id)beginIntrusion(room,id);}
+    else if(choice==='hack'){const id=pick(Object.keys(room.players).filter(id=>room.players[id].connected&&room.players[id].computerOpen&&atComputer(room.players[id])&&!room.players[id].hidden));if(id)beginIntrusion(room,id);}
     room.nextEvent=now+Math.max(42000,78000-room.day*4500)+Math.random()*14000;
   }
   return true;

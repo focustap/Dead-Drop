@@ -77,6 +77,8 @@ export function createApp(){
       clearTimeout(moveTimer);pendingMove=null;
       const entry=joined.get(socket.id);if(!entry)return;
       joined.delete(socket.id);const room=rooms.get(entry.code);if(!room)return;
+      gameAction(room,entry.id,'computer:leave');
+      if(room.curtains?.owner===entry.id)gameAction(room,entry.id,'curtain:release');
       room.players[entry.id].connected=false;sessions.get(entry.token).expires=Date.now()+120000;
       emitState(room);
     });

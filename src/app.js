@@ -8,7 +8,7 @@ const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>'$'+Math.max(0,Math.floor(n||0)).toLocaleString();
 const audio=new Soundscape();
-let lastScare=null;
+let lastScare=null,curtainHolding=false,curtainPulsePending=false,lastCollector=null;
 let stationOpen=null,site='market',browserHistory=[],summaryKey='',serverOffset=0,stationSignature='',lastRenderedView='';
 let settings={sensitivity:1,volume:.35,quality:'medium'};try{Object.assign(settings,JSON.parse(localStorage.getItem('dead-drop-settings')||'{}'));}catch{}
 const gameNow=()=>Date.now()+serverOffset;
@@ -37,8 +37,9 @@ function updateHud(){
   $('panel').classList.toggle('powerOff',!state.environment.power);
   $('panel').querySelector('.panelFooter span').textContent=state.environment.power?'NETWORK ONLINE':'POWER LOST · RESET THE BREAKER';
   $('clock').textContent=new Date(Math.max(0,state.nightEnds-gameNow())).toISOString().slice(14,19);
-  $('quota').textContent=fmt(state.earnings)+' / '+fmt(state.quota);
-  $('quotaFill').style.width=Math.min(100,state.earnings/state.quota*100)+'%';
+  $('quota').textContent=fmt(state.bank)+' / '+fmt(state.quota);
+  $('quotaDue').textContent='CYCLE '+(Math.floor((state.day-1)/3)+1)+(state.summary?.quotaPaid?' PAID':' / '+state.nightsRemaining+' NIGHT'+(state.nightsRemaining===1?'':'S')+' LEFT');
+  $('quotaFill').style.width=(state.summary?.quotaPaid?100:Math.min(100,state.bank/state.quota*100))+'%';
   $('carry').textContent=state.players.find(p=>p.id===self)?.carrying?'CARRYING HARVEST → PACKING TABLE':'';
   renderStation();renderSummary();renderHorror();
   if(viewOpen){
@@ -76,7 +77,7 @@ function enter(){
 function refresh(){
   if(!state)return;
   updateHud();renderChallenge();
-  const intr=state.intrusion;
+  const intr=panelOpen?state.intrusion:null;
   if(intr&&!lastIntrusion){audio.alarm();if(viewOpen)closeView();lastIntrusion=true;document.exitPointerLock?.();$('intrusion').classList.remove('hidden');$('panel').classList.add('hidden');notify('INTRUSION DETECTED');}
   else if(!intr&&lastIntrusion){lastIntrusion=false;$('intrusion').classList.add('hidden');if(panelOpen)$('panel').classList.remove('hidden');notify('SYSTEM RESPONSE COMPLETE');}
   if(panelOpen&&!intr&&!inFlight){
@@ -100,7 +101,7 @@ async function start(mode){
     conn.on('connect_error',e=>notify('CONNECTION ERROR: '+e.message.slice(0,90)));
     conn.on('state',s=>receive(s));
     conn.on('peers',players=>world.setOthers(players,self));
-    conn.on('disconnect',()=>notify('CONNECTION LOST — RECONNECTING'));
+    conn.on('disconnect',()=>{closePanel();stopCurtains();notify('CONNECTION LOST — RECONNECTING');});
     await new Promise((resolve,reject)=>{if(conn.connected)return resolve();conn.once('connect',resolve);conn.once('connect_error',reject);});
     clearTimeout(timeout);
     const res=await conn.timeout(7000).emitWithAck(mode==='create'?'room:create':'room:join',{name:alias,code:$('joinCode').value.trim().toUpperCase()});
@@ -112,16 +113,18 @@ async function start(mode){
   }catch(error){socket?.disconnect();notify(error.message||'CO-OP UNAVAILABLE');}
 }
 function release(){if(document.pointerLockElement)document.exitPointerLock();}
-function openPanel(which='terminal'){
+async function openPanel(which='terminal'){
   if(!state||state.intrusion||state.phase!=='night')return;
-  release();panelOpen=true;tab=which;lastStateSignature='';
+  panelOpen=true;const result=await command('computer:enter');if(!result.ok){closePanel();notify(result.text);return;}
+  if(!panelOpen||state.phase!=='night'){void command('computer:leave');return;}
+  release();tab=which;lastStateSignature='';
   $('panel').classList.remove('hidden');
   renderPanel();
 }
-function closePanel(){panelOpen=false;$('panel').classList.add('hidden');}
+function closePanel(){const wasOpen=panelOpen;panelOpen=false;$('panel').classList.add('hidden');if(wasOpen){void command('computer:leave');if(state?.challenge)void command('contract:cancel');}}
 function openView(mode){
   if(!state||state.intrusion||state.phase!=='night')return;
-  release();panelOpen=false;$('panel').classList.add('hidden');
+  release();closePanel();
   viewOpen=mode;world.setView(mode);
   const overlay=$('surveillance');overlay.classList.remove('hidden');overlay.dataset.view=mode;
   $('surveillanceName').textContent=mode==='alley'?'CAM 01 // BACK ALLEY':'SUPPLY DOOR // PEEPHOLE';
@@ -130,7 +133,7 @@ function openView(mode){
   updateHud();
 }
 function closeView(){if(!viewOpen)return;viewOpen=null;world.setView(null);$('surveillance').classList.add('hidden');}
-function openGuide(){release();guideOpen=true;$('guide').classList.remove('hidden');}
+function openGuide(){release();if(panelOpen)closePanel();guideOpen=true;$('guide').classList.remove('hidden');}
 function closeGuide(){guideOpen=false;$('guide').classList.add('hidden');}
 function goInteract(t){
   if(!t)return;
@@ -251,8 +254,8 @@ function renderSummary(){
   release();closePanel();closeStation();closeView();closeGuide();
   const s=state.summary;
   $('summaryTitle').textContent=state.phase==='won'?'THE CREW GOT OUT':state.phase==='lost'?'THE LINE WENT DEAD':'DAWN / NIGHT '+s.day;
-  $('summaryText').textContent=state.reason||(s.met?'Quota cleared. Rest while you can.':'Quota missed. $60 penalty. Make it up before the cycle ends.');
-  $('summaryLedger').innerHTML=[['ARCHIVE SALES',s.hacking],['CONTRACTS',s.contracts],['DELIVERIES',s.deliveries],['EXPENSES',-s.expenses],['LOSSES',-s.losses],['NET',s.net]].map(([label,value])=>`<div><span>${label}</span><b>${value<0?'−':''}${fmt(Math.abs(value))}</b></div>`).join('')+`<p>SHIFT ${fmt(s.gross)} / ${fmt(s.quota)}<br>CYCLE ${fmt(s.cycleEarned)} / ${fmt(s.cycleRequired)}<br>WALLET ${fmt(s.bank)}</p>`;
+  $('summaryText').textContent=state.reason||(s.cycleEnd?'Quota paid. The next three nights are yours.':s.nightsRemaining+' night'+(s.nightsRemaining===1?'':'s')+' left. Keep the quota money in your wallet.');
+  $('summaryLedger').innerHTML=[['ARCHIVE SALES',s.hacking],['CONTRACTS',s.contracts],['DELIVERIES',s.deliveries],['SUPPLIES / EQUIPMENT',-(s.expenses-s.quotaPaid)],['QUOTA PAYMENT',-s.quotaPaid],['LOSSES',-s.losses],['NET',s.net]].map(([label,value])=>`<div><span>${label}</span><b>${value<0?'−':''}${fmt(Math.abs(value))}</b></div>`).join('')+`<p>SHIFT INCOME ${fmt(s.gross)}<br>CYCLE QUOTA ${fmt(s.quota)} ${s.quotaPaid?'PAID':'DUE AFTER NIGHT '+(state.day<=3?'3':'6')}<br>WALLET ${fmt(s.bank)}</p>`;
   $('nextNight').classList.toggle('hidden',state.phase!=='summary');
 }
 function renderChallenge(){
@@ -266,14 +269,15 @@ function renderChallenge(){
   $('carrier').style.left=Math.max(0,Math.min(100,(now-(c.windowStart-2800))/6000*100))+'%';
 }
 const world=new World($('scene'),{
-  canMove:()=>!state?.players.find(p=>p.id===self)?.hidden&&!(state?.players.find(p=>p.id===self)?.stunnedUntil>gameNow())&&active&&(!remote||socket?.connected)&&state?.phase==='night'&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&!state?.intrusion&&!state?.challenge,
+  canMove:()=>!curtainHolding&&!state?.players.find(p=>p.id===self)?.hidden&&!(state?.players.find(p=>p.id===self)?.stunnedUntil>gameNow())&&active&&(!remote||socket?.connected)&&state?.phase==='night'&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&!state?.intrusion&&!state?.challenge,
   onLock:locked=>{if(!active)return;if(!locked&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&!state?.intrusion)$('prompt').textContent='CLICK ROOM TO LOOK · WASD MOVE';},
   onMove:pos=>{if(remote){if(socket?.connected)socket.emit('player:move',pos);}else if(local){movePlayer(local,self,pos);}},
-  onFocus:focus=>{nearby=focus;if(!(state?.players.find(p=>p.id===self)?.stunnedUntil>gameNow())&&active&&state?.phase==='night'&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&!state?.intrusion&&!state?.challenge)$('prompt').textContent=focus?'[E] '+focus.label:(document.pointerLockElement===world.renderer.domElement?'':'CLICK ROOM TO LOOK · WASD MOVE');else $('prompt').textContent='';}
+  onFocus:focus=>{nearby=focus;if(!(state?.players.find(p=>p.id===self)?.stunnedUntil>gameNow())&&active&&state?.phase==='night'&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&!state?.intrusion&&!state?.challenge)$('prompt').textContent=focus?(focus.id==='curtains'?'[HOLD E] KEEP CURTAINS SHUT':'[E] '+focus.label):(document.pointerLockElement===world.renderer.domElement?'':'CLICK ROOM TO LOOK · WASD MOVE');else $('prompt').textContent='';}
 });
 window.addEventListener('keydown',async e=>{
   if(state?.players.find(p=>p.id===self)?.hidden){if(e.code==='KeyE'||e.key==='Escape'){e.preventDefault();await command('hide:leave');}return;}
   if(state?.intrusion){
+    if(e.key==='Escape'){e.preventDefault();closePanel();return;}
     if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyW','KeyA','KeyS','KeyD'].includes(e.code)){
       e.preventDefault();const key=e.code.startsWith('Key')?e.code.slice(3).toLowerCase():e.code;
       const r=await command('intrusion',{key});if(!r.ok)notify(r.text);renderIntrusion();
@@ -286,7 +290,7 @@ window.addEventListener('keydown',async e=>{
     if(panelOpen){closePanel();return;}
     openGuide();return;
   }
-  if(e.code==='KeyE'&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&active&&state?.phase==='night'&&!state?.challenge){e.preventDefault();goInteract(nearby);}
+  if(e.code==='KeyE'&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&active&&state?.phase==='night'&&!state?.challenge){e.preventDefault();if(nearby?.id==='curtains'){if(!e.repeat&&!curtainHolding){curtainHolding=true;audio.tone(190,.45,.06);world.keys.clear();void pulseCurtains();}return;}goInteract(nearby);}
 });
 $('solo').onclick=()=>start('solo');$('createRoom').onclick=()=>start('create');$('joinRoom').onclick=()=>start('join');
 $('closePanel').onclick=closePanel;
@@ -317,13 +321,26 @@ function renderHorror(){
   $('enterHall').disabled=state.horror.locked;
   $('hiding').classList.toggle('hidden',!p?.hidden||state.phase!=='night');
   $('hideStatus').textContent=a?.kind==='window'?'KEEP STILL / '+(a.phase==='warning'?'TAPPING AT THE GLASS':Math.ceil(Math.max(0,a.ends-now)/1000)+'s UNTIL FOOTSTEPS FADE'):'QUIET / YOU CAN LEAVE';
-  const threatText=a?({door:'LATCH RATTLING / '+(state.horror.locked?'BOLT LOCKED':'BOLT UNLOCKED'),window:a.phase==='warning'?'TAPPING AT THE WINDOW / FIND COVER':'FOOTSTEPS INSIDE / STAY HIDDEN',hall:a.phase==='warning'?'HEAVY FOOTSTEPS APPROACHING':'SHADOW IN THE HALLWAY / WAIT INSIDE',echo:'A SOUND FROM THE EMPTY ROOMS'})[a.kind]:'';
-  $('horrorStatus').textContent=threatText;$('horrorStatus').classList.toggle('hidden',!a);
+  const threatText=a?({door:'LATCH RATTLING / '+(state.horror.locked?'BOLT LOCKED':'BOLT UNLOCKED'),window:a.phase==='retreating'?'THE PROWLER IS LEAVING':a.phase==='warning'?'PROWLER OUTSIDE / HOLD E AT THE CURTAINS':'WINDOW BREACHED / FIND COVER',hall:a.phase==='warning'?'HEAVY FOOTSTEPS APPROACHING':'SHADOW IN THE HALLWAY / WAIT INSIDE',echo:'A SOUND FROM THE EMPTY ROOMS'})[a.kind]:'';
+  const held=state.curtains;if(curtainHolding&&(held?.closed||a?.kind!=='window'||a.phase==='hunting'))stopCurtains();
+  $('curtainHold').classList.toggle('hidden',!curtainHolding);$('curtainHoldText').textContent=held?.owner===self?'HOLD E / '+Math.min(5,(now-held.started)/1000).toFixed(1)+' / 5s':'TAKING THE CURTAINS';
+  if(state.phase==='collector'){if(lastCollector!==state.collector.start){lastCollector=state.collector.start;closePanel();closeStation();closeView();closeGuide();release();audio.collector();} }
+  $('horrorStatus').textContent=state.phase==='collector'?'QUOTA UNPAID / THE COLLECTOR IS HERE':threatText;$('horrorStatus').classList.toggle('hidden',!a&&state.phase!=='collector');
   const caught=p?.scare&&p.scare.until>now;$('scareShade').classList.toggle('hidden',!caught);
-  if(caught&&lastScare!==state.day+':'+p.scare.id){lastScare=state.day+':'+p.scare.id;closePanel();closeStation();closeView();closeGuide();release();audio.scare();notify('You were found. Catch your breath.');}
+  if(caught&&lastScare!==state.day+':'+p.scare.id){lastScare=state.day+':'+p.scare.id;closePanel();closeStation();closeView();closeGuide();release();if(p.scare.kind==='collector')audio.collector();else audio.scare();notify(p.scare.kind==='collector'?'The Collector has come for payment.':'You were found. Catch your breath.');}
 }
 $('toggleBolt').onclick=async()=>{const r=await command(state.horror.locked?'door:unlock':'door:lock');notify(r.text);};
 $('enterHall').onclick=async()=>{const r=await command('hall:enter');notify(r.text);if(r.ok)closeView();};
 $('leaveHide').onclick=()=>command('hide:leave');
 
 $('cancelContract').onclick=()=>command('contract:cancel');
+
+async function pulseCurtains(){
+  if(!curtainHolding||curtainPulsePending)return;curtainPulsePending=true;
+  try{const r=await command('curtain:hold');if(!r.ok)stopCurtains();}finally{curtainPulsePending=false;}
+}
+function stopCurtains(){if(!curtainHolding)return;curtainHolding=false;void command('curtain:release');}
+window.addEventListener('keyup',e=>{if(e.code==='KeyE')stopCurtains();});
+window.addEventListener('blur',()=>{stopCurtains();if(panelOpen)closePanel();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){stopCurtains();if(panelOpen)closePanel();}});
+setInterval(()=>{if(curtainHolding)void pulseCurtains();},250);

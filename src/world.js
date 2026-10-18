@@ -1,3 +1,4 @@
+import {Courtyard} from './courtyard.js';
 import {HorrorScene} from './horror.js';
 import {slide,STATIONS} from '../shared/layout.js';
 import * as THREE from 'three';
@@ -24,7 +25,7 @@ export class World{
     this.clock=new THREE.Clock();this.yaw=0;this.pitch=0;this.pos=new THREE.Vector3(-1.2,1.65,-.75);
     this.keys=new Set();this.players=new Map();this.interactions=[];this.near=null;this.lastMove=0;
     this.lights={};this.build();
-    this.security=new SecurityViews(this.scene,this.renderer);this.horrorScene=new HorrorScene(this.scene,this.camera);this.view=null;this.zone='apartment';
+    this.security=new SecurityViews(this.scene,this.renderer);this.horrorScene=new HorrorScene(this.scene,this.camera);this.courtyard=new Courtyard(this.scene);this.view=null;this.zone='apartment';
     this.resize();window.addEventListener('resize',()=>this.resize());
     this.renderer.domElement.addEventListener('click',()=>{if(this.callbacks.canMove?.())this.renderer.domElement.requestPointerLock?.();});
     document.addEventListener('pointerlockchange',()=>{
@@ -47,6 +48,7 @@ export class World{
     box(scene,2.1,1.9,.05,1.85,1.55,3.96,new THREE.MeshStandardMaterial({color:'#354b51',transparent:true,opacity:.28,roughness:.1,metalness:.4}));
     for(const x of [.78,1.85,2.92])box(scene,.06,2,.08,x,1.55,3.91,metal);
     box(scene,1.15,2.5,.5,-1.8,1.25,3.58,wood2);for(const x of [-2.08,-1.52]){box(scene,.53,2.3,.06,x,1.25,3.3,wood);for(let i=0;i<7;i++)box(scene,.4,.025,.02,x,1.6+i*.07,3.26,dark);}
+    this.interactions.push({id:'curtains',label:'HOLD E · KEEP CURTAINS SHUT',...STATIONS.curtains});
     this.interactions.push({id:'hide',label:'HIDE IN WARDROBE',...STATIONS.hide});
     box(scene,.22,3.1,8,-5,1.54,0,paint);box(scene,.22,3.1,8,5,1.54,0,paint);
     // Distressed baseboards, pipes, and practical architectural details.
@@ -128,7 +130,7 @@ export class World{
         }
       }
       for(const o of this.players.values()){const moving=o.position.distanceTo(o.userData.target)>.025;o.position.lerp(o.userData.target,Math.min(1,dt*12));o.rotation.y=o.userData.yaw;o.userData.legs.forEach((leg,i)=>leg.rotation.x=moving?Math.sin(performance.now()*.008)*.4*(i?1:-1):0);}
-      const now=performance.now();this.security.animate(dt,now);this.horrorScene.animate(this.gameNow+now-this.gameStamp,dt);this.lights.bulb.intensity=this.power?35+(Math.sin(now*.0012)*1.3)+(Math.sin(now*.067)>0.989?-18:0):.5;
+      const now=performance.now();this.security.animate(dt,now);this.horrorScene.animate(this.gameNow+now-this.gameStamp,dt);this.courtyard.animate(this.gameNow+now-this.gameStamp,dt);this.lights.bulb.intensity=this.power?35+(Math.sin(now*.0012)*1.3)+(Math.sin(now*.067)>0.989?-18:0):.5;
       if(this.feedbackUntil>now){const progress=(this.feedbackUntil-now)/900;this.can.rotation.z=Math.sin(progress*Math.PI)*-.6;this.waterStream.visible=this.feedbackAction==='garden:water';if(this.waterStream.visible)this.can.position.set(3.9,1.4,2.4);this.seedToken.visible=this.feedbackAction==='garden:plant';this.seedToken.position.y=.65+progress*.65;this.packageMesh.rotation.z=this.feedbackAction==='pack:seal'?Math.sin(progress*Math.PI)*.1:0;}else{this.can.rotation.z=0;this.can.position.set(3.2,.28,3.35);this.seedToken.visible=false;this.waterStream.visible=false;this.packageMesh.rotation.z=0;}
       this.camera.position.copy(this.pos);this.camera.rotation.set(this.pitch,this.yaw,0,'YXZ');
       this.near=this.view?null:this.nearby();this.callbacks.onFocus?.(this.near);
@@ -136,7 +138,7 @@ export class World{
     };loop();
   }
   applySettings(settings){this.sensitivity=Number(settings.sensitivity)||1;this.renderer.setPixelRatio(settings.quality==='low'?.75:settings.quality==='high'?Math.min(devicePixelRatio,1.75):1);this.renderer.shadowMap.enabled=settings.quality!=='low';this.security.quality=settings.quality;this.resize();}
-  updateGame(state,now){this.gameNow=now;this.gameStamp=performance.now();const me=state.players.find(p=>p.id===this.self);if(me){this.zone=me.zone;this.horrorScene.update(state,me);}this.power=state.environment.power;this.security.signalLost=!this.power||state.environment.cameraUntil>now;this.security.serverNow=now;this.security.serverStamp=performance.now();const g=state.garden;this.plantGroup.visible=g.planted;this.plantGroup.scale.setScalar(.2+g.growth/125);this.soilMesh.visible=g.soil;this.lights.grow.intensity=g.light&&this.power?5:0;this.growLamp.material.emissiveIntensity=g.light&&this.power?1:0;this.seenActivities??=new Set();for(const {activity} of state.players)if(activity&&activity.until>now&&!this.seenActivities.has(activity.id)){this.seenActivities.add(activity.id);if(this.seenActivities.size>64)this.seenActivities.delete(this.seenActivities.values().next().value);this.stationFeedback(activity.action);}this.harvestTray.visible=state.inventory.buds>0;this.packageMesh.visible=state.inventory.packages>0;this.breakerLamp.material=this.power?green:red;}
+  updateGame(state,now){this.courtyard.update(state);this.gameNow=now;this.gameStamp=performance.now();const me=state.players.find(p=>p.id===this.self);if(me){this.zone=me.zone;this.horrorScene.update(state,me);}this.power=state.environment.power;this.security.signalLost=!this.power||state.environment.cameraUntil>now;this.security.serverNow=now;this.security.serverStamp=performance.now();const g=state.garden;this.plantGroup.visible=g.planted;this.plantGroup.scale.setScalar(.2+g.growth/125);this.soilMesh.visible=g.soil;this.lights.grow.intensity=g.light&&this.power?5:0;this.growLamp.material.emissiveIntensity=g.light&&this.power?1:0;this.seenActivities??=new Set();for(const {activity} of state.players)if(activity&&activity.until>now&&!this.seenActivities.has(activity.id)){this.seenActivities.add(activity.id);if(this.seenActivities.size>64)this.seenActivities.delete(this.seenActivities.values().next().value);this.stationFeedback(activity.action);}this.harvestTray.visible=state.inventory.buds>0;this.packageMesh.visible=state.inventory.packages>0;this.breakerLamp.material=this.power?green:red;}
   stationFeedback(action){this.feedbackAction=action;this.feedbackUntil=performance.now()+900;}
   focusStation(id){const target=STATIONS[id];if(!target)return;this.yaw=Math.atan2(-(target.x-this.pos.x),-(target.z-this.pos.z));this.pitch=-.22;}
   setView(mode){this.view=mode==='alley'||mode==='peephole'?mode:null;this.security.setView(this.view);this.keys.clear();if(!this.view){this.near=this.nearby();this.callbacks.onFocus?.(this.near);}}
@@ -146,6 +148,7 @@ export class World{
     for(const t of this.interactions){
       if(this.zone==='hall'&&!['breaker','return'].includes(t.id)||this.zone!=='hall'&&['breaker','return'].includes(t.id))continue;
       const d=new THREE.Vector3(t.x-p.x,-.5,t.z-p.z),len=d.length();
+      if(t.id==='curtains'&&this.courtyard?.state?.horror.active?.kind!=='window')continue;
       if(len>t.range)continue;
       const facing=d.normalize().dot(dir);
       if(facing>.05 && facing/Math.max(.4,len)>score){best=t;score=facing/Math.max(.4,len);}
