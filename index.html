@@ -31,4 +31,13 @@
   <p>At your computer, type <code>help</code> for every terminal command. Check the alley camera for pickups and use the peephole before opening the supply door.</p>
   <p>ARROW KEYS or WASD block intrusions. One wrong input costs wallet money.</p>
   <button id="guideOkay" class="primary">GOT IT</button></div></div>
-<script type="module" src="./app.js"></script></body></html>
+<div id="startupError" class="startupError hidden" role="alert"><div><h2>GAME DIDN'T LOAD</h2><p>Dead Drop needs its built game files. In GitHub, open <b>Settings → Pages</b> and choose <b>GitHub Actions</b> under Build and deployment.</p><p>Then run <b>Publish browser build</b> in Actions and reload this page.</p><button id="retryGame" onclick="location.reload()">RETRY</button></div></div>
+<script>
+  window.__deadDropReady = false;
+  window.__deadDropStartupProblem = function(){
+    if (window.__deadDropReady) return;
+    document.getElementById('startupError')?.classList.remove('hidden');
+  };
+  window.setTimeout(window.__deadDropStartupProblem, 10000);
+</script>
+<script type="module" src="./app.js" onerror="window.__deadDropStartupProblem()"></script></body></html>

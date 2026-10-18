@@ -3,6 +3,7 @@ test('solo game boots a real WebGL room, and terminal help and market work',asyn
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('/');
   await expect(page.getByRole('button',{name:/SOLO NIGHT/})).toBeVisible();
+  await expect(page.locator('#startupError')).toBeHidden();
   await page.locator('#solo').click();
   await expect(page.locator('#lobby')).toBeHidden();
   await expect(page.locator('#scene canvas')).toBeVisible();

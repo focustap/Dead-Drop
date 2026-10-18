@@ -215,6 +215,7 @@ $('closePanel').onclick=closePanel;
 $('closeSurveillance').onclick=closeView;
 $('openGuide').onclick=openGuide;$('closeGuide').onclick=closeGuide;$('guideOkay').onclick=closeGuide;
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;lastStateSignature='';renderPanel();});
+window.__deadDropReady = true;
 setInterval(()=>{
   if(!active)return;
   if(local){tick(local);rawState();}
