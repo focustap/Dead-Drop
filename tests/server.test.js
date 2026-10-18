@@ -18,6 +18,9 @@ test('four-player shared rewards, full-room protection and authenticated reconne
   assert.equal(resumed.ok,true);assert.equal(resumed.playerId,host.playerId);assert.equal(resumed.state.players.find(p=>p.id===host.playerId).carrying,3);
   assert.equal((await fifth.emitWithAck('room:resume',{token:'made-up'})).ok,false);
   assert.equal((await fifth.emitWithAck('room:resume',{token:host.token})).ok,false);
+  const position=room.players[host.playerId];
+  for(const yaw of [.2,1.2,2.2])replacement.emit('player:move',{x:position.x,z:position.z,yaw});
+  await sleep(160);assert.equal(room.players[host.playerId].yaw,2.2,'the last movement in a burst must survive rate limiting');
   const before=room.inventory.seeds;await replacement.emitWithAck('game:action',{event:'buy',payload:{item:'seeds'}});await sleep(45);
   const remoteDoor=await replacement.emitWithAck('game:action',{event:'door:open'});assert.equal(remoteDoor.ok,false);assert.equal(room.inventory.seeds,before);
 });

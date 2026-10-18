@@ -46,10 +46,20 @@ export function createApp(){
       }catch(error){ackError(ack,error);}
     });
     let lastMove=0,lastAction=Date.now(),actionBudget=12;
-    socket.on('player:move',position=>{
+    let moveTimer=null,pendingMove=null;
+    const flushMove=()=>{
+      moveTimer=null;
       const room=rooms.get(joined.get(socket.id)?.code);
-      if(!room||Date.now()-lastMove<55)return;
-      lastMove=Date.now();movePlayer(room,joined.get(socket.id).id,position);socket.to(room.code).emit('peers',Object.values(room.players));
+      if(!room||!pendingMove)return;
+      const position=pendingMove;pendingMove=null;lastMove=Date.now();
+      movePlayer(room,joined.get(socket.id).id,position);socket.to(room.code).emit('peers',Object.values(room.players));
+    };
+    socket.on('player:move',position=>{
+      if(!joined.has(socket.id))return;
+      pendingMove=position;
+      if(moveTimer)return;
+      const delay=55-(Date.now()-lastMove);
+      if(delay<=0)flushMove();else moveTimer=setTimeout(flushMove,delay);
     });
     socket.on('game:action',(data={},ack)=>{
       try{
@@ -64,6 +74,7 @@ export function createApp(){
       }catch(error){ackError(ack,error);}
     });
     socket.on('disconnect',()=>{
+      clearTimeout(moveTimer);pendingMove=null;
       const entry=joined.get(socket.id);if(!entry)return;
       joined.delete(socket.id);const room=rooms.get(entry.code);if(!room)return;
       room.players[entry.id].connected=false;sessions.get(entry.token).expires=Date.now()+120000;
