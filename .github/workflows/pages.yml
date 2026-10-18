@@ -23,6 +23,8 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: npm run build
+      - name: Verify compiled website
+        run: test -s dist/index.html && test -s dist/app.js && test -s dist/styles.css
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

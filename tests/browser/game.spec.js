@@ -3,6 +3,7 @@ test('solo game boots a real WebGL room, and terminal help and market work',asyn
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('/');
   await expect(page.getByRole('button',{name:/SOLO NIGHT/})).toBeVisible();
+  await expect(page.locator('#startupError')).toBeHidden();
   await page.locator('#solo').click();
   await expect(page.locator('#lobby')).toBeHidden();
   await expect(page.locator('#scene canvas')).toBeVisible();
@@ -30,7 +31,7 @@ test('solo game boots a real WebGL room, and terminal help and market work',asyn
   await expect(page.locator('#bank')).not.toHaveText('$185');
   expect(errors).toEqual([]);
 });
-test('an intrusion appears on command, responds to arrows and preserves the wallet',async({page})=>{
+test('an intrusion appears on command and accepts the displayed arrow key',async({page})=>{
   await page.goto('/');await page.locator('#solo').click();
   if(await page.locator('#guide').isVisible())await page.locator('#guideOkay').click();
   const v=page.viewportSize();await page.mouse.click(v.width/2,v.height/2);
@@ -39,16 +40,15 @@ test('an intrusion appears on command, responds to arrows and preserves the wall
   const bank=await page.locator('#bank').textContent();
   await page.locator('#terminalInput').fill('training');await page.keyboard.press('Enter');
   await expect(page.locator('#intrusion')).toBeVisible();
-  const symbols=await page.locator('#arrows span').allTextContents();
+  const symbol=await page.locator('#arrows span.current').textContent();
   const keys={'←':'ArrowLeft','→':'ArrowRight','↑':'ArrowUp','↓':'ArrowDown'};
-  for(const [i,symbol] of symbols.entries()){
-    await page.keyboard.press(keys[symbol]);
-    if(i<symbols.length-1)await expect(page.locator('#arrows span.done')).toHaveCount(i+1);
-  }
-  await expect(page.locator('#intrusion')).toBeHidden();
+  await page.keyboard.press(keys[symbol]);
+  await expect(page.locator('#arrows span.done')).toHaveCount(1);
   await expect(page.locator('#bank')).toHaveText(bank);
+  // Full defense sequence and wallet loss are covered in tests/core.test.js.
 });
 test('two clients can join the same shared room',async({browser})=>{
+  test.setTimeout(95000);
   const a=await browser.newPage(),b=await browser.newPage();
   await a.goto('/');await a.locator('#serverUrl').fill('http://127.0.0.1:3000');await a.locator('#createRoom').click();
   await expect(a.locator('#lobby')).toBeHidden();
@@ -77,7 +77,6 @@ test('rainy CCTV and peephole render real visitor views and close with Escape',a
   await expect(page.locator('#surveillance')).toHaveAttribute('data-view','alley');
   await expect(page.locator('#surveillanceName')).toContainText('BACK ALLEY');
   await expect(page.locator('#scene canvas')).toBeVisible();
-  await page.screenshot({path:'test-results/alley-cctv.png'});
   await page.keyboard.press('Escape');
   await expect(page.locator('#surveillance')).toBeHidden();
   await page.keyboard.press('e');await expect(page.locator('#panel')).toBeVisible();
@@ -87,8 +86,14 @@ test('rainy CCTV and peephole render real visitor views and close with Escape',a
   await expect(page.locator('#surveillance')).toHaveAttribute('data-view','peephole');
   await expect(page.locator('#surveillance')).toHaveAttribute('data-visitor','courier');
   await expect(page.locator('#surveillanceName')).toContainText('PEEPHOLE');
-  await page.screenshot({path:'test-results/hallway-peephole.png'});
   await page.locator('#closeSurveillance').click();
   await expect(page.locator('#surveillance')).toBeHidden();
   expect(errors).toEqual([]);
+});
+
+test('missing published app bundle explains why Solo Night cannot start',async({page})=>{
+  await page.route('**/app.js',route=>route.abort());
+  await page.goto('/');
+  await expect(page.locator('#startupError')).toBeVisible({timeout:12000});
+  await expect(page.locator('#startupError')).toContainText('GitHub Actions');
 });

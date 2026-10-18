@@ -53,3 +53,7 @@ GitHub Pages builds from `.github/workflows/pages.yml`. Set Pages **Build and de
 The CCTV monitor on the apartment wall displays a live 3D view of the wet alley with animated rain and whoever is waiting at the dead drop. Press **E** beside the monitor for a fullscreen surveillance view. The **Security** computer app also has **View Live CCTV**.
 
 Press **E** beside the supply door's peephole to look into the 3D corridor. Couriers and intruders appear outside as visible characters; the peephole uses a wide-angle circular vignette. You can also select **Look Through Peephole** in Security. Use **Esc** or **× Exit** to return to your room. Both feeds reflect the shared room state across co-op players.
+
+## Solo Night button does nothing?
+
+This usually means GitHub Pages is showing repository files instead of the compiled build. Under **Settings → Pages → Build and deployment**, select **GitHub Actions**, not **Deploy from a branch**. Then open **Actions → Publish browser build** and rerun the workflow. Wait for a successful deployment. The publishing action uploads the generated `dist/index.html`, `dist/app.js`, and `dist/styles.css`; pointing Pages directly at `main` will not load the game. A startup error panel now explains this automatically if the bundled app is missing.
