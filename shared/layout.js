@@ -1,6 +1,6 @@
 // Shared collision and interaction layout; all dimensions are metres.
 export const STATIONS = Object.freeze({
-  garden:{x:3.1,z:2.4,range:1.8}, packaging:{x:.6,z:2.9,range:1.8},
+  curtains:{x:1.95,z:3.3,range:1.55}, garden:{x:3.1,z:2.4,range:1.8}, packaging:{x:.6,z:2.9,range:1.8},
   door:{x:4.08,z:-1.45,range:1.8}, chute:{x:-4.03,z:1.15,range:1.8},
   breaker:{x:8.3,z:1,range:1.55}, hide:{x:-1.8,z:3.15,range:1.65}, return:{x:5.7,z:-1.45,range:1.65}
 });
@@ -25,3 +25,5 @@ export function slide(from,to,zone='apartment'){
   return {x,z};
 }
 export function atStation(player,key){const s=STATIONS[key];return !!player&&Math.hypot(player.x-s.x,player.z-s.z)<=s.range;}
+
+export function atComputer(p){return !!p&&p.zone==='apartment'&&[-3,-.95,1.1,3.15].some(x=>Math.hypot(p.x-x,p.z+1.9)<=3.1);}

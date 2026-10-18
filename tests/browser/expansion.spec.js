@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {createApp} from '../../server/index.js';
+import {beginIntrusion} from '../../shared/core.js';
 import {startEncounter} from '../../shared/horror.js';
 
 test('survival site and remote archive can be investigated, extracted and sold through the OS',async({page})=>{
@@ -12,7 +13,7 @@ test('survival site and remote archive can be investigated, extracted and sold t
     const room=[...game.rooms.values()][0];room.nextEvent=Infinity;
     await expect(page.locator('#prompt')).toContainText('WORKSTATION');await page.keyboard.press('e');await expect(page.locator('#panel')).toBeVisible();
     await page.locator('[data-tab="browser"]').click();await page.locator('#address').fill('threats.onion');await page.locator('#addressForm button').click();
-    await expect(page.locator('.threatNotes article')).toHaveCount(8);await expect(page.locator('.website')).toContainText('The Glass Walker');await page.screenshot({path:'test-results/threats-guide.png'});
+    await expect(page.locator('.threatNotes article')).toHaveCount(9);await expect(page.locator('.website')).toContainText('The Window Prowler');await page.screenshot({path:'test-results/threats-guide.png'});
     await page.locator('[data-site="contracts"]').click();await page.locator('[data-remote-target]').first().click();await expect(page.locator('.circuit')).toBeVisible();
     const ports=await page.locator('[data-port]').evaluateAll(nodes=>nodes.map(n=>({id:n.dataset.port,value:parseInt(n.textContent)})).sort((a,b)=>a.value-b.value));
     for(const p of ports)await page.locator('[data-port="'+p.id+'"]').click();
@@ -38,9 +39,21 @@ test('a window encounter interrupts the computer with a visible personal scare',
     await page.goto('/');await page.locator('#serverUrl').fill('http://127.0.0.1:'+game.http.address().port);await page.locator('#createRoom').click();await expect(page.locator('#lobby')).toBeHidden();await page.locator('#quality').selectOption('low');await page.locator('#guideOkay').click();
     const room=[...game.rooms.values()][0];room.nextEvent=Infinity;room.horror.recoveryUntil=0;
     await expect(page.locator('#prompt')).toContainText('WORKSTATION');await page.keyboard.press('e');await expect(page.locator('#panel')).toBeVisible();
-    startEncounter(room,'window');await expect(page.locator('#horrorStatus')).toContainText('TAPPING');
+    startEncounter(room,'window');await expect(page.locator('#horrorStatus')).toContainText('PROWLER');
     room.horror.active.attackAt=Date.now()-1;room.horror.active.ends=Date.now()+10000;
     await expect(page.locator('#scareShade')).toBeVisible();await expect(page.locator('#panel')).toBeHidden();await page.screenshot({path:'test-results/window-scare.png'});
     expect(room.ledger.losses).toBeGreaterThan(0);
+  }finally{await page.close();await game.close();}
+});
+
+test('wallet attacks require the open computer and do not follow the player after Escape',async({page})=>{
+  test.setTimeout(70000);const game=createApp();await new Promise(r=>game.http.listen(0,'127.0.0.1',r));
+  try{
+    await page.goto('/');await page.locator('#serverUrl').fill('http://127.0.0.1:'+game.http.address().port);await page.locator('#createRoom').click();await expect(page.locator('#lobby')).toBeHidden();await page.locator('#quality').selectOption('low');await page.locator('#guideOkay').click();
+    const room=[...game.rooms.values()][0],id=Object.keys(room.players)[0];room.nextEvent=Infinity;room.nextHack=0;room.horror.recoveryUntil=0;
+    expect(beginIntrusion(room,id)).toBe(false);await expect(page.locator('#intrusion')).toBeHidden();
+    await expect(page.locator('#prompt')).toContainText('WORKSTATION');await page.keyboard.press('e');await expect.poll(()=>room.players[id].computerOpen).toBe(true);expect(beginIntrusion(room,id)).toBe(true);
+    await expect(page.locator('#intrusion')).toBeVisible();const cooldown=room.nextHack;await page.keyboard.press('Escape');await expect(page.locator('#intrusion')).toBeHidden();await expect(page.locator('#panel')).toBeHidden();await expect.poll(()=>room.players[id].computerOpen).toBe(false);
+    expect(room.nextHack).toBe(cooldown);expect(beginIntrusion(room,id)).toBe(false);expect(room.bank).toBe(151);
   }finally{await page.close();await game.close();}
 });

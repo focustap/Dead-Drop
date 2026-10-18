@@ -326,3 +326,5 @@ body:has(.surveillance:not(.hidden)) #hud,body:has(.surveillance:not(.hidden)) #
 .remoteDesktop button:hover:not(:disabled),.remoteEmpty button:hover{background:#325654}
 .remoteDesktop input{background:#071719;border:1px solid #668c88;color:#d9eee6;padding:9px 12px;font:13px var(--mono)}
 .remoteDesktop .chosen{background:#547575;color:white}
+
+.quotaStat small{font:9px var(--mono);letter-spacing:1px;color:#c2b799}.curtainHold{position:fixed;z-index:45;bottom:110px;left:50%;transform:translateX(-50%);padding:20px 35px;background:#111a16e8;border:1px solid #b4b48a;display:grid;gap:12px;text-align:center}.curtainHold b{font:16px var(--mono);color:#e1dbb3}.curtainHold span{font-size:9px;letter-spacing:2px}

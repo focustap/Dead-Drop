@@ -44,3 +44,18 @@ test('co-op remote evidence pays once and hiding survives authenticated reconnec
   await sleep(400);assert.equal(room.players[host.playerId].scare,undefined);assert.equal(room.players[peer.playerId].scare.kind,'window');assert.equal(latest.horror.active.phase,'hunting');
   const bank=room.bank;await sleep(300);assert.equal(room.bank,bank);
 });
+
+test('co-op quota settlement charges once and one curtain holder protects both clients',async t=>{
+  const app=createApp();await new Promise(r=>app.http.listen(0,'127.0.0.1',r));const sockets=[];
+  t.after(async()=>{sockets.forEach(s=>s.disconnect());await app.close();});
+  const connect=async()=>{const s=io('http://127.0.0.1:'+app.http.address().port,{transports:['websocket'],reconnection:false});sockets.push(s);await new Promise(r=>s.once('connect',r));return s;};
+  const a=await connect(),host=await a.emitWithAck('room:create',{}),b=await connect(),peer=await b.emitWithAck('room:join',{code:host.code});
+  const room=app.rooms.get(host.code),action=(s,event)=>s.emitWithAck('game:action',{event});
+  room.nextEvent=Infinity;room.day=3;room.bank=room.quota+500;room.nightEnds=Date.now()+20;await sleep(350);
+  assert.equal(room.bank,500);assert.equal(room.summary.quotaPaid,2550);await sleep(300);assert.equal(room.bank,500);
+  const advances=await Promise.all([a,b].map(s=>action(s,'night:next')));assert.equal(advances.filter(r=>r.ok).length,1);assert.equal(room.day,4);assert.equal(room.quota,4550);
+  room.nextEvent=Infinity;room.horror.recoveryUntil=0;Object.assign(room.players[host.playerId],STATIONS.curtains);Object.assign(room.players[peer.playerId],STATIONS.curtains);
+  let latest;b.on('state',s=>{latest=s;});startEncounter(room,'window');assert.equal((await action(a,'curtain:hold')).ok,true);assert.equal((await action(b,'curtain:hold')).ok,false);
+  for(let i=0;i<22&&!room.curtains?.closed;i++){await sleep(250);await action(a,'curtain:hold');}
+  assert.equal(room.curtains.closed,true);assert.equal(latest.horror.active.phase,'retreating');assert.equal(room.bank,500);assert.equal(room.players[peer.playerId].scare,null);
+});

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {newRoom,addPlayer,publicState,terminalCommand,intrusionInput,gameAction,tick,movePlayer} from '../shared/core.js';
 import {STATIONS,blocked,slide} from '../shared/layout.js';
 import {NIGHT_MS,QUOTAS,visitor} from '../shared/campaign.js';
-const roomWithPlayer=()=>{const room=newRoom('TEST01');addPlayer(room,'p1','Runner');gameAction(room,'p1','start');return room;};
+const roomWithPlayer=()=>{const room=newRoom('TEST01');addPlayer(room,'p1','Runner');gameAction(room,'p1','start');gameAction(room,'p1','computer:enter');return room;};
 test('a new hideout has four targets and five folders per target',()=>{
   const room=roomWithPlayer();
   assert.equal(Object.keys(room.targets).length,4);
@@ -105,22 +105,32 @@ test('swept collision prevents tunneling through each prop and bounds movement s
   const wall=slide({x:0,z:0},{x:30,z:0});assert.ok(wall.x<=4.65);
   const before={...r.players.p1};movePlayer(r,'p1',{x:NaN,z:0,yaw:0});assert.deepEqual(r.players.p1,before);
 });
-test('six nights, two three-night cycles, upgrades and meaningful win/loss',()=>{
+test('six nights settle only two wallet quotas and preserve upgrades',()=>{
   const r=roomWithPlayer();r.upgrades.push('lamp');
   for(let day=1;day<=6;day++){
-    r.ledger.hacking=r.quota;r.bank+=r.quota;tick(r,r.nightEnds);assert.equal(r.summary.met,true);assert.equal(r.summary.net,r.quota-(45+day*10));
-    assert.equal(r.phase,day===6?'won':'summary');assert.equal(gameAction(r,'p1','market:sell',{code:'x'}).ok,false);
-    if(day<6){assert.equal(gameAction(r,'p1','night:next').ok,true);assert.equal(r.quota,QUOTAS[day]);assert.ok(r.upgrades.includes('lamp'));assert.equal(r.nightEnds-Date.now()<=NIGHT_MS,true);}
+    if(day%3===0)r.bank=r.quota;
+    const before=r.bank,heat=r.heat;tick(r,r.nightEnds);
+    assert.equal(r.phase,day===6?'won':'summary');
+    assert.equal(r.bank,day%3===0?0:before);assert.equal(r.heat,heat);
+    assert.equal(r.summary.quotaPaid,day%3===0?r.quota:0);
+    assert.equal(r.quota,QUOTAS[Math.floor((day-1)/3)]);
+    const settled=r.bank;tick(r,r.nightEnds+1);assert.equal(r.bank,settled);
+    if(day<6){assert.equal(gameAction(r,'p1','night:next').ok,true);assert.ok(r.upgrades.includes('lamp'));}
   }
-  assert.equal(r.history.length,6);assert.equal(gameAction(r,'p1','night:next').ok,false);
-  const losing=roomWithPlayer();for(let day=1;day<=3;day++){tick(losing,losing.nightEnds);if(day<3)gameAction(losing,'p1','night:next');}
-  assert.equal(losing.phase,'lost');assert.equal(losing.bank,0);
+  assert.equal(r.history.length,6);assert.equal(Object.keys(r.settlements).length,2);
 });
-test('a missed daily quota can be recovered before the cycle deadline',()=>{
-  const r=roomWithPlayer();tick(r,r.nightEnds);assert.equal(r.summary.met,false);assert.equal(r.phase,'summary');
-  gameAction(r,'p1','night:next');r.ledger.hacking=QUOTAS[0]+QUOTAS[1];tick(r,r.nightEnds);
-  gameAction(r,'p1','night:next');r.ledger.deliveries=QUOTAS[2];tick(r,r.nightEnds);assert.equal(r.phase,'summary');assert.equal(r.summary.cycleMet,true);
+test('spending income can fail a wallet quota and Collector blocks the normal transition',()=>{
+  const r=roomWithPlayer();r.ledger.hacking=9999;
+  for(let day=1;day<=3;day++){
+    const heat=r.heat;tick(r,r.nightEnds);assert.equal(r.bank,185);assert.equal(r.heat,heat);
+    if(day<3){assert.equal(r.phase,'summary');assert.equal(gameAction(r,'p1','night:next').ok,true);}
+  }
+  assert.equal(r.phase,'collector');assert.equal(gameAction(r,'p1','night:next').ok,false);
+  tick(r,r.collector.attackAt);assert.equal(r.players.p1.scare.kind,'collector');assert.equal(r.phase,'collector');
+  tick(r,r.collector.ends);assert.equal(r.phase,'lost');assert.equal(gameAction(r,'p1','night:next').ok,false);
+  assert.equal(r.settlements[0].paid,false);assert.equal(r.bank,185);
 });
+
 test('recurring targets and contracts stay available, and tiers unlock through progression',()=>{
   const r=roomWithPlayer();r.day=3;tick(r,r.nextTarget);const fresh=Object.keys(r.targets).at(-1);assert.ok(r.targets[fresh].folders['.cache']);
   r.targets[fresh].tier=3;assert.match(terminalCommand(r,'p1','connect '+fresh).text,/decoder required/);

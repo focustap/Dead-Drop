@@ -80,7 +80,7 @@ test('browser navigates distinct sites and live CCTV returns to the apartment',a
 test('memory contracts pay once and the clock reaches a real campaign loss',async({page})=>{
   test.setTimeout(95000);
   await page.clock.install();await page.goto('/');await page.locator('#solo').click();if(await page.locator('#guide').isVisible())await page.locator('#guideOkay').click();
-  await expect(page.locator('#clock')).toBeVisible();await expect(page.locator('#quota')).toContainText('$650');
+  await expect(page.locator('#clock')).toBeVisible();await expect(page.locator('#quota')).toContainText('$2,550');
   const vp=page.viewportSize();await page.mouse.click(vp.width/2,vp.height/2);await expect(page.locator('#prompt')).toContainText('WORKSTATION');await page.keyboard.press('e');await expect.poll(()=>page.evaluate(()=>document.pointerLockElement===null)).toBe(true);await page.locator('[data-tab="browser"]').click();await page.locator('[data-site="contracts"]').click();
   await page.clock.pauseAt(await page.evaluate(()=>Date.now()+500));
   await page.locator('.contract').filter({hasText:'MEMORY RELAY'}).first().getByRole('button').click();
@@ -89,8 +89,9 @@ test('memory contracts pay once and the clock reaches a real campaign loss',asyn
   for(const key of sequence)await page.locator('[data-packet="'+key+'"]').click();
   await expect(page.locator('#contractChallenge')).toBeHidden();await expect(page.locator('#bank')).toHaveText('$320');
   await page.clock.fastForward(240000);await expect(page.locator('#nightSummary')).toBeVisible();await expect(page.locator('#summaryTitle')).toContainText('NIGHT 1');
-  await page.locator('#nextNight').click();await expect(page.locator('#day')).toHaveText('2/6');await expect(page.locator('#quota')).toContainText('$850');
+  await page.locator('#nextNight').click();await expect(page.locator('#day')).toHaveText('2/6');await expect(page.locator('#quota')).toContainText('$2,550');
   await page.clock.fastForward(240000);await page.locator('#nextNight').click();await page.clock.fastForward(240000);
+  await expect(page.locator('#nightSummary')).toBeHidden();await expect(page.locator('#horrorStatus')).toContainText('COLLECTOR');await page.clock.fastForward(3000);await expect(page.locator('#scareShade')).toBeVisible();await page.clock.runFor(120);await page.screenshot({path:'test-results/collector.png'});await page.clock.fastForward(4000);
   await expect(page.locator('#summaryTitle')).toHaveText('THE LINE WENT DEAD');await expect(page.locator('#nextNight')).toBeHidden();
   await page.screenshot({path:'test-results/summary.png'});
 });

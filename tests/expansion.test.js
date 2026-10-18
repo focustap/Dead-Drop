@@ -33,12 +33,12 @@ test('window ignores the lock, hiding protects each player for the full hunt',t=
   const c=setup(t),{r}=c;startEncounter(r,'window',c.now);stand(r,'hide');assert.equal(gameAction(r,'a','hide:enter').ok,true);r.players.b.carrying=3;
   const before={...r.players.a};movePlayer(r,'a',{x:0,z:0,yaw:1},c.now+1000);assert.equal(r.players.a.x,before.x);
   gameAction(r,'b','contract:start',{id:r.contracts[0].id});
-  c.advance(12100);assert.equal(r.challenges.b,undefined);assert.equal(r.players.a.scare,undefined);assert.ok(r.players.b.scare);assert.equal(r.players.b.carrying,0);
+  c.advance(23100);assert.equal(r.challenges.b,undefined);assert.equal(r.players.a.scare,undefined);assert.ok(r.players.b.scare);assert.equal(r.players.b.carrying,0);
   c.advance(9000);assert.equal(r.horror.active.kind,'window');c.advance(1000);assert.equal(r.horror.active,null);assert.equal(gameAction(r,'a','hide:leave').ok,true);
   assert.equal(startEncounter(r,'hall',c.now),false);
 });
 test('leaving hiding early is dangerous; all hidden crew survive without losing funds',t=>{
-  const c=setup(t),{r}=c;for(const id of ['a','b']){stand(r,'hide',id);gameAction(r,id,'hide:enter');}startEncounter(r,'window',c.now);c.advance(13000);assert.equal(r.bank,185);
+  const c=setup(t),{r}=c;for(const id of ['a','b']){stand(r,'hide',id);gameAction(r,id,'hide:enter');}startEncounter(r,'window',c.now);c.advance(24000);assert.equal(r.bank,185);
   gameAction(r,'a','hide:leave');c.advance(250);assert.ok(r.players.a.scare);assert.equal(r.players.b.scare,undefined);
 });
 test('hallway entry, safe return, relocated breaker and patrol attack are authoritative',t=>{
@@ -49,9 +49,9 @@ test('hallway entry, safe return, relocated breaker and patrol attack are author
   stand(r,'door');gameAction(r,'a','door:unlock');gameAction(r,'a','hall:enter');c.advance(250);assert.ok(r.players.a.scare);assert.equal(r.players.a.zone,'apartment');assert.equal(r.players.b.scare,undefined);
 });
 test('major encounters cannot overlap hacks and recovery is enforced',t=>{
-  const c=setup(t),{r}=c;r.nextHack=0;assert.equal(beginIntrusion(r,'a'),true);assert.equal(startEncounter(r,'window',c.now),false);assert.equal(beginIntrusion(r,'b'),false);
+  const c=setup(t),{r}=c;r.nextHack=0;gameAction(r,'a','computer:enter');assert.equal(beginIntrusion(r,'a'),true);assert.equal(startEncounter(r,'window',c.now),false);assert.equal(beginIntrusion(r,'b'),false);
   r.intrusions={};assert.equal(beginIntrusion(r,'a'),false);assert.equal(startEncounter(r,'window',c.now),true);assert.equal(beginIntrusion(r,'a',true),false);
-  c.advance(23000);assert.equal(startEncounter(r,'door',c.now),false);c.advance(31000);assert.equal(startEncounter(r,'hall',c.now),true);
+  c.advance(34000);assert.equal(startEncounter(r,'door',c.now),false);c.advance(31000);assert.equal(startEncounter(r,'hall',c.now),true);
 });
 function connect(r,type){const target=Object.values(r.remoteTargets).find(t=>t.type===type);assert.equal(gameAction(r,'a','remote:start',{id:target.id}).ok,true);const s=r.remoteSessions.a;for(const port of [...s.route])assert.equal(gameAction(r,'a','remote:route',{port}).ok,true);return target;}
 test('remote archive requires circuit, documents, decoded seal, extraction and one shared sale',t=>{
@@ -77,5 +77,5 @@ test('remote lease pauses for physical danger and power loss, but expires during
 test('inherited remote ids cannot corrupt money, and scrape cooldown prevents spam',t=>{
   const {r}=setup(t);for(const id of ['__proto__','constructor','toString'])for(const action of ['remote:start','remote:sell'])assert.equal(gameAction(r,'a',action,{id}).ok,false);
   assert.equal(r.bank,185);terminalCommand(r,'a','connect NOVA-17');terminalCommand(r,'a','scrape finances');assert.match(terminalCommand(r,'a','scrape backups').text,/cooling/);assert.equal(r.scans,1);
-  assert.equal(THREATS.length,8);
+  assert.equal(THREATS.length,9);
 });

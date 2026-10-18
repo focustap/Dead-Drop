@@ -2,25 +2,27 @@ import {spend,visitor} from './campaign.js';
 import {atStation} from './layout.js';
 
 export const THREATS=[
+  {id:'collector',name:'The Collector',look:'A broad figure with a sealed case. Comes only for an unpaid quota.',sign:'The three-night payment deadline arrives with too little money in the crew wallet.',behavior:'Arrives after night three or six when the full quota cannot be collected. Ends the operation.',counter:'Keep $2,550 available by the end of night three, and $4,550 by the end of night six. Earnings spent on equipment cannot pay the Collector.',cost:'An unavoidable final encounter and the end of the run once payment has failed.'},
   {id:'door',name:'The Locksmith',look:'An empty-handed hood tests the handle.',sign:'Three slow knocks. The latch rattles.',behavior:'Waits outside, then tries an unlocked door after ten seconds.',counter:'Keep the bolt locked. Use the peephole; collect couriers without leaving the latch open.',cost:'One shared wallet loss, shock, and heat. Hiding protects individuals from the scare.'},
-  {id:'window',name:'The Glass Walker',look:'A long silhouette presses against the rear window, then climbs inside.',sign:'Three taps and a pale face in the glass. Twelve seconds to get out of sight.',behavior:'Ignores locks and searches the apartment for ten seconds.',counter:'Use E at the wardrobe beside the packing table. Stay inside until footsteps fade. Every operator must hide; the hallway is also safe.',cost:'Exposed operators are shocked and lose carried harvest. The crew pays one bounded loss per encounter.'},
+  {id:'window',name:'The Window Prowler',look:'A person in a weathered coat crosses the courtyard and peers through the glass.',sign:'Footsteps on wet paving, movement between the lights, then tapping at the window.',behavior:'Approaches for eight seconds, then searches the window for a way inside.',counter:'Stand at the window and HOLD E continuously for five seconds to keep both curtains shut. One operator protects everyone. Releasing early resets the hold and hastens the attack; hiding remains a last resort after entry.',cost:'An entry can shock exposed operators, destroy carried harvest and cause one bounded crew loss.'},
   {id:'hall',name:'The Tenant',look:'A tall figure in the corridor under a failing ceiling lamp.',sign:'Heavy footsteps, a red flicker, and a shadow visible through the peephole.',behavior:'Twelve seconds of approach, then ten seconds patrolling outside the apartment.',counter:'Check the peephole. Wait indoors until it leaves, then visit the hallway fuse box. If already outside, return through door 204.',cost:'Caught operators are forced inside and shocked. A single crew penalty applies.'},
-  {id:'echo',name:'Empty Rooms',look:'A shadow passes the glass; nobody is there when you look again.',sign:'Distant banging, footsteps, or a short light flicker.',behavior:'A brief harmless disturbance, sometimes preceding a long silence.',counter:'Observe. Do not open the door just because something knocked.',cost:'None. Not every sound belongs to a visitor.'},
-  {id:'hack',name:'Wallet Leech',look:'The workstation tears into a red security screen.',sign:'A sharp two-tone alarm and visual distortion.',behavior:'Rare digital intrusion with a short response deadline.',counter:'Enter the displayed sequence with arrows or WASD. Firewall buys time; a cold wallet limits damage.',cost:'A bounded portion of shared funds is lost on a mistake or timeout.'},
-  {id:'thief',name:'The Collector',look:'A hood lingering away from the alley lamp, looking over a shoulder.',sign:'No phone check beside the red tray.',behavior:'Takes any package released to the chute.',counter:'Watch the live CCTV. Wait for a buyer checking a glowing phone.',cost:'One shipment and extra heat.'},
+  {id:'echo',name:'Empty Rooms',look:'Distant pedestrians and empty landings outside rain-streaked glass.',sign:'Distant banging, footsteps, or a short light flicker.',behavior:'A brief harmless disturbance, sometimes preceding a long silence.',counter:'Observe. Do not open the door just because something knocked.',cost:'None. Not every sound belongs to a visitor.'},
+  {id:'hack',name:'Wallet Leech',look:'The workstation tears into a red security screen.',sign:'A sharp two-tone alarm and visual distortion.',behavior:'Only attacks an operator actively using a workstation. No queued attacks follow you outside the interface.',counter:'Enter the sequence with arrows or WASD. Leaving a live attack forfeits its defense and settles the wallet loss once. Firewall buys time; a cold wallet limits damage.',cost:'A bounded portion of shared funds is lost on a mistake or timeout.'},
+  {id:'thief',name:'The Lifter',look:'A hood lingering away from the alley lamp, looking over a shoulder.',sign:'No phone check beside the red tray.',behavior:'Takes any package released to the chute.',counter:'Watch the live CCTV. Wait for a buyer checking a glowing phone.',cost:'One shipment and extra heat.'},
   {id:'power',name:'Bad Wiring',look:'The lamps buzz and dim before the terminals die.',sign:'Twelve seconds of ballast buzzing.',behavior:'Stops computers and plant growth until the hallway breaker is reset.',counter:'Check the peephole, enter the hallway, reset the box opposite door 204, and return. There is no deadline after the power trips.',cost:'Lost working time. Growing progress is preserved.'},
   {id:'camera',name:'Blind Spot',look:'Rolling noise replaces the alley feed.',sign:'Interference on both the monitor and fullscreen CCTV.',behavior:'Clears after ten seconds, or four with shielded wiring.',counter:'Wait for the feed before releasing a shipment.',cost:'No direct loss; a blind drop can feed a thief.'}
 ];
-export function newHorror(now){return {locked:true,active:null,recoveryUntil:now+35000,serial:0,ambient:null};}
+export function newHorror(now){return {locked:true,active:null,recoveryUntil:now+65000,serial:0,ambient:null};}
 const result=(ok,text)=>({ok,text});
 export function startEncounter(r,kind,now=Date.now()){
   const h=r.horror;
   if(!['door','window','hall','echo'].includes(kind)||h.active||now<h.recoveryUntil||Object.keys(r.intrusions).length)return false;
   if(kind==='door'&&r.door.visitor!=='empty')return false;
   h.active={id:++h.serial,kind,phase:'warning',start:now,attackAt:now+(kind==='door'?16500:12000),ends:now+(kind==='door'?21000:22000),caught:[],charged:false};
+  if(kind==='window'){h.active.approachUntil=now+8000;h.active.attackAt=now+23000;h.active.ends=now+33000;r.curtains=null;}
   if(kind==='echo'){h.active.attackAt=now+4000;h.active.ends=now+6000;}
   if(kind==='door'){r.door=visitor('intruder',now,'door');r.door.next=now+27000;}
-  r.log.unshift({id:'encounter-'+h.serial,time:now,text:kind==='window'?'Three taps at the rear window. A face against the glass.':kind==='hall'?'Heavy hallway footsteps. A long shadow passes the peephole.':kind==='door'?'Three slow knocks. Someone tests the latch.':'A heavy bang from the empty apartment upstairs.'});
+  r.log.unshift({id:'encounter-'+h.serial,time:now,text:kind==='window'?'Wet footsteps cross the courtyard. Someone is coming to the window.':kind==='hall'?'Heavy hallway footsteps. A long shadow passes the peephole.':kind==='door'?'Three slow knocks. Someone tests the latch.':'A heavy bang from the empty apartment upstairs.'});
   r.log=r.log.slice(0,18);return true;
 }
 function catchPlayers(r,event,players,now){
@@ -38,15 +40,38 @@ export function openedIntruder(r,now){
 }
 export function tickHorror(r,now){
   const h=r.horror,a=h.active;if(!a)return;
-  if(now>=a.ends){h.active=null;h.recoveryUntil=now+30000;r.nextEvent=Math.max(r.nextEvent,h.recoveryUntil);return;}
+  if(a.kind==='window'&&r.curtains?.owner&&a.phase!=='hunting'){
+    const hold=r.curtains,p=r.players[hold.owner];
+    if(!p?.connected||!atStation(p,'curtains')||p.hidden||p.zone!=='apartment'||now-hold.lastPulse>2000){releaseCurtains(r,hold.owner,now);}
+    else if(now-hold.started>=5000&&a.phase!=='retreating'){hold.closed=true;a.phase='retreating';a.retreatAt=now;a.ends=now+5500;}
+  }
+  if(now>=a.ends){h.active=null;r.curtains=null;h.recoveryUntil=now+30000;r.nextEvent=Math.max(r.nextEvent,h.recoveryUntil);return;}
+  if(a.phase==='retreating')return;
   if(now>=a.attackAt){a.phase='hunting';
     const players=Object.values(r.players);
+    if(a.kind==='window'){r.curtains=null;}
     if(a.kind==='window')catchPlayers(r,a,players.filter(p=>p.zone!=='hall'&&!p.hidden),now);
     if(a.kind==='hall')catchPlayers(r,a,players.filter(p=>p.zone==='hall'),now);
     if(a.kind==='door'&&!h.locked){catchPlayers(r,a,players.filter(p=>p.zone!=='hall'&&!p.hidden),now);h.locked=true;}
   }
 }
+export function releaseCurtains(r,id,now){
+  const hold=r.curtains,a=r.horror.active;if(!hold||hold.owner!==id||hold.closed)return;
+  r.curtains=null;
+  if(a?.kind==='window'&&a.phase!=='retreating'){a.attackAt=Math.min(a.attackAt,now+6500);a.ends=a.attackAt+10000;}
+}
 export function horrorAction(r,p,action,now){
+  if(action==='curtain:release'){releaseCurtains(r,p.id,now);return result(true,'Curtains released.');}
+  if(action==='curtain:hold'){
+    const a=r.horror.active;
+    if(a?.phase==='retreating'&&r.curtains?.owner===p.id&&r.curtains.closed)return result(true,'Curtains secured.');
+    if(a?.kind!=='window'||a.phase==='hunting'||a.phase==='retreating')return result(false,'No prowler at the curtains.');
+    if(!atStation(p,'curtains')||p.zone!=='apartment'||p.hidden)return result(false,'Stand at the window.');
+    if(r.curtains&&now-r.curtains.lastPulse>2000)releaseCurtains(r,r.curtains.owner,now);
+    if(r.curtains?.owner&&r.curtains.owner!==p.id)return result(false,'Another operator has the curtains.');
+    r.curtains??={owner:p.id,started:now,lastPulse:now,closed:false};r.curtains.lastPulse=now;
+    return result(true,'Keep holding E.');
+  }
   if(action==='hide:enter'){
     if(!atStation(p,'hide')||p.zone==='hall')return result(false,'Reach the wardrobe beside the packing table.');
     p.hidden=true;return result(true,'Inside the wardrobe. Stay until the footsteps fade.');
