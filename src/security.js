@@ -21,6 +21,8 @@ export function character(parent,coat,pose='buyer'){
     cyl(leg,.105,.085,.63,0,-.3,0,trim);box(leg,.19,.14,.32,0,-.66,-.07,shoes);g.userData.legs.push(leg);
   }
   if(pose==='courier'){box(g,.47,.33,.32,.18,1,-.35,mat('#8d775b'));box(g,.06,.34,.33,.18,1,-.35,mat('#c3b698'));}
+  if(pose==='police'){box(g,.11,.08,.025,.13,1.3,-.2,mat('#b3a35d'));box(g,.4,.06,.32,0,1.88,-.03,trim);}
+  if(pose==='searcher'){box(g,.32,.4,.25,.2,.9,-.3,mat('#5c6657'));}
   if(pose==='thief'){box(g,.23,.23,.14,.18,1.13,-.22,mat('#454e4f'));g.rotation.y=-.3;}
   if(pose==='buyer')box(g,.085,.14,.018,-.17,1.12,-.32,new THREE.MeshBasicMaterial({color:'#8eb8c8'}));
   return g;
@@ -81,7 +83,7 @@ export class SecurityViews{
     this.alleyPeople={
       buyer:character(s,'#374c55'),
       thief:character(s,'#282a30','thief'),
-      watcher:character(s,'#24292a')
+      stranger:character(s,'#24292a','intruder'),police:character(s,'#1e354e','police'),searcher:character(s,'#494437','searcher'),pedestrian:character(s,'#686259','pedestrian')
     };
     for(const [kind,g] of Object.entries(this.alleyPeople)){g.position.set(kind==='thief'?-1.05:.65,0,kind==='thief'?-9.4:-10.35);g.rotation.y=.15;s.add(g);}
     this.dropParcel=box(s,.35,.2,.27,-.85,.94,-11.93,mat('#ac9670'));this.dropParcel.visible=false;label(s,'DROP 04',-.85,1.8,-12.15);
@@ -122,6 +124,8 @@ export class SecurityViews{
     label(s,'EXIT →',8.7,2.45,-8,-Math.PI/2,'#a3e5a7');
     for(let i=0;i<12;i++)box(s,.01,.2+(i%3)*.13,.5,8.77,.45+(i%4)*.4,-12+i*2,mat('#41463c'));
     box(s,.18,2.4,1.35,5.16,1.2,-1.45,steel);box(s,.19,2.25,1.18,5.18,1.12,-1.45,mat('#383e38'));box(s,.08,.06,.16,5.32,1.05,-1.08,mat('#b4a58b',.35,.6));label(s,'204',5.30,1.85,-1.45,Math.PI/2);
+    this.peepFigure=character(s,'#4b453c','intruder');this.peepFigure.visible=false;s.add(this.peepFigure);
+    const skin=mat('#aa9d87');const face=new THREE.Mesh(new THREE.SphereGeometry(.16,14,10),skin);face.scale.set(.85,1,.4);face.position.set(0,1.65,-.23);this.peepFigure.add(face);box(this.peepFigure,.04,.06,.045,0,1.65,-.31,skin);for(const x of [-.055,.055])box(this.peepFigure,.035,.015,.02,x,1.69,-.3,mat('#080b0c'));
     this.hallPeople={courier:character(s,'#686451','courier'),intruder:character(s,'#24242b','intruder')};
     for(const g of Object.values(this.hallPeople)){g.position.set(7.1,0,-1.45);g.rotation.y=Math.PI/2;s.add(g);}
   }
@@ -142,6 +146,15 @@ export class SecurityViews{
     }
     this.rain.geometry.attributes.position.needsUpdate=true;
     const now=this.serverNow?this.serverNow+elapsed-this.serverStamp:Date.now();
+    const peep=this.encounters?.horror.peep;this.peepFigure.visible=!!peep&&now<peep.ends;
+    if(this.peepFigure.visible){
+      const age=(now-peep.start)/1000,kind=peep.kind;
+      this.peepFigure.visible=kind==='delayed'?now>=peep.revealAt:kind==='watcher'?age<4:true;
+      this.peepFigure.position.set(kind==='face'||kind==='delayed'?5.65:7.05,0,kind==='watcher'?-11:kind==='turner'?-5+Math.min(3,age)*1.2:-1.55);
+      if(this.peepFigure.userData.visitId!==peep.id){this.peepFigure.userData.visitId=peep.id;this.peepFigure.rotation.y=kind==='turner'?Math.PI:Math.PI/2;}
+      this.peepFigure.rotation.y=turnToward(this.peepFigure.rotation.y,kind==='turner'&&age<3?Math.PI:Math.PI/2,dt);
+      this.peepFigure.userData.legs.forEach((leg,i)=>leg.rotation.x=kind==='turner'&&age<3?Math.sin(t*7)*.35*(i?1:-1):0);
+    }
     for(const [people,state,hall] of [[this.alleyPeople,this.alleyState,false],[this.hallPeople,this.doorState,true]])for(const person of Object.values(people)){
       if(!person.visible)continue;
       const approaching=now<state.waitAt,leaving=now>=state.leaveAt;
@@ -156,7 +169,7 @@ export class SecurityViews{
       person.rotation.x=state.outcome&&now-state.leaveAt<1300?-Math.sin((now-state.leaveAt)/1300*Math.PI)*.35:0;
     }
     this.dropParcel.visible=!!this.alleyState?.outcome&&now-this.alleyState.leaveAt<800;
-    this.hallLights.forEach((light,i)=>light.intensity=17*(i===2&&Math.sin(t*17)>.85?.18:1));
+    this.hallLights.forEach((light,i)=>light.intensity=17*(!this.reducedEffects&&i===2&&Math.sin(t*17)>.85?.18:1));
     this.displayMaterial.uniforms.time.value=t;
     this.feed.material.color.set(this.signalLost?'#000000':'#cee5da');
     if(++this.frame%(this.quality==='low'?6:4)===0){

@@ -73,8 +73,9 @@ test('walk, inspect a courier, grow at the tent, carry, pack and deliver through
     await page.keyboard.down('e');await expect(page.locator('#curtainHold')).toBeVisible();await expect.poll(()=>room.curtains?.closed,{timeout:15000}).toBe(true);await page.keyboard.up('e');
     expect(room.horror.active.phase).toBe('retreating');room.horror.active.ends=Date.now()+30000;await page.screenshot({path:'test-results/curtains.png'});room.horror.active.ends=Date.now()+100;await expect.poll(()=>room.horror.active).toBe(null);expect(room.players[id].scare).toBeUndefined();
     await walk(-1.8,2.3);await interact(-1.8,3.15,'WARDROBE');await expect(page.locator('#hiding')).toBeVisible();await page.locator('#leaveHide').click();
-    await walk(-1.8,1.1);await walk(-3.85,1.1);
-    room.alley={...visitor('buyer',Date.now()-8000,'alley'),leaveAt:Date.now()+60000,next:Date.now()+65000};await interact(-4.03,1.15,'DEAD DROP');await expect.poll(()=>room.ledger.deliveries).toBe(210);
+    await walk(-1.8,1.1);await walk(-1.2,-.75);await interact(-.95,-1.9,'WORKSTATION');await page.locator('[data-tab="browser"]').click();await page.locator('[data-site="sales"]').click();
+    await page.locator('#listedQuantity').fill('1');await page.locator('#listStock button').click();const receiver=room.sales.buyers.find(b=>b.quantity===1&&!b.walked&&!b.deal);await page.locator(`[data-accept="${receiver.id}"]`).click();await expect.poll(()=>room.sales.deals.length).toBe(1);const pickup=room.sales.deals[0];await page.keyboard.press('Escape');
+    await walk(-1.8,1.1);await walk(-3.85,1.1);pickup.arrives=Date.now()-1000;pickup.leaveAt=Date.now()+60000;room.alley={...visitor('buyer',Date.now()-8000,'alley'),deal:pickup.id,code:pickup.code,leaveAt:pickup.leaveAt,next:pickup.leaveAt+6000};await interact(-4.03,1.15,'DEAD DROP');await expect.poll(()=>room.ledger.deliveries).toBe(pickup.price);
     expect(room.inventory.packages).toBe(0);expect(errors).toEqual([]);
   }finally{await page.close();await game.close();}
 });

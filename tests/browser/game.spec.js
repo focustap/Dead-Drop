@@ -77,17 +77,13 @@ test('browser navigates distinct sites and live CCTV returns to the apartment',a
   await page.screenshot({path:'test-results/alley.png'});await page.keyboard.press('Escape');await expect(page.locator('#surveillance')).toBeHidden();expect(errors).toEqual([]);
 });
 
-test('memory contracts pay once and the clock reaches a real campaign loss',async({page})=>{
+test('contracts expose real objectives without instant payouts and quotas reach a real campaign loss',async({page})=>{
   test.setTimeout(95000);
   await page.clock.install();await page.goto('/');await page.locator('#solo').click();if(await page.locator('#guide').isVisible())await page.locator('#guideOkay').click();
   await expect(page.locator('#clock')).toBeVisible();await expect(page.locator('#quota')).toContainText('$2,550');
   const vp=page.viewportSize();await page.mouse.click(vp.width/2,vp.height/2);await expect(page.locator('#prompt')).toContainText('WORKSTATION');await page.keyboard.press('e');await expect.poll(()=>page.evaluate(()=>document.pointerLockElement===null)).toBe(true);await page.locator('[data-tab="browser"]').click();await page.locator('[data-site="contracts"]').click();
   await page.clock.pauseAt(await page.evaluate(()=>Date.now()+500));
-  await page.locator('.contract').filter({hasText:'MEMORY RELAY'}).first().getByRole('button').click();
-  await expect(page.locator('#contractChallenge')).toBeVisible();const sequence=(await page.locator('#challengeStatus').textContent()).match(/[1-4]/g);
-  expect(sequence).toHaveLength(4);await page.clock.fastForward(3200);
-  for(const key of sequence)await page.locator('[data-packet="'+key+'"]').click();
-  await expect(page.locator('#contractChallenge')).toBeHidden();await expect(page.locator('#bank')).toHaveText('$320');
+  const job=page.locator('.contract').filter({hasText:'Two parcels, one receiver'});await expect(job).toContainText('negotiate');await job.getByRole('button',{name:'ACCEPT',exact:true}).click();await expect(job).toContainText('ACCEPTED BY CREW');await expect(page.locator('#bank')).toHaveText('$185');
   await page.clock.fastForward(240000);await expect(page.locator('#nightSummary')).toBeVisible();await expect(page.locator('#summaryTitle')).toContainText('NIGHT 1');
   await page.locator('#nextNight').click();await expect(page.locator('#day')).toHaveText('2/6');await expect(page.locator('#quota')).toContainText('$2,550');
   await page.clock.fastForward(240000);await page.locator('#nextNight').click();await page.clock.fastForward(240000);

@@ -10,25 +10,28 @@ test('survival site and remote archive can be investigated, extracted and sold t
   try{
     await page.goto('/');await page.locator('#serverUrl').fill('http://127.0.0.1:'+game.http.address().port);await page.locator('#createRoom').click();
     await expect(page.locator('#lobby')).toBeHidden();await page.locator('#quality').selectOption('low');await page.locator('#guideOkay').click();
-    const room=[...game.rooms.values()][0];room.nextEvent=Infinity;
+    const room=[...game.rooms.values()][0];room.nextEvent=Infinity;room.stalkerUsed=true;for(const t of Object.values(room.remoteTargets))t.activeOwner=false;
     await expect(page.locator('#prompt')).toContainText('WORKSTATION');await page.keyboard.press('e');await expect(page.locator('#panel')).toBeVisible();
     await page.locator('[data-tab="browser"]').click();await page.locator('#address').fill('threats.onion');await page.locator('#addressForm button').click();
-    await expect(page.locator('.threatNotes article')).toHaveCount(9);await expect(page.locator('.website')).toContainText('The Window Prowler');await page.screenshot({path:'test-results/threats-guide.png'});
+    await expect(page.locator('.threatNotes article')).toHaveCount(12);await expect(page.locator('.website')).toContainText('The Window Prowler');await page.screenshot({path:'test-results/threats-guide.png'});
     await page.locator('[data-site="contracts"]').click();await page.locator('[data-remote-target]').first().click();await expect(page.locator('.circuit')).toBeVisible();
     const ports=await page.locator('[data-port]').evaluateAll(nodes=>nodes.map(n=>({id:n.dataset.port,value:parseInt(n.textContent)})).sort((a,b)=>a.value-b.value));
     for(const p of ports)await page.locator('[data-port="'+p.id+'"]').click();
     await expect(page.locator('.fileExplorer')).toBeVisible();
     await page.locator('[data-folder="mail"]').click();await page.locator('[data-file="key-memo.txt"]').click();
     await expect(page.locator('.remoteDocument pre')).toContainText('rotation +');
+    await page.locator('[data-remote="collect"]').click();
     const memo=await page.locator('.remoteDocument pre').textContent(),shift=Number(memo.match(/rotation \+(\d+)/)[1]);
     await page.locator('[data-folder="logs"]').click();await page.locator('[data-file="seal.txt"]').click();
     await expect(page.locator('.remoteDocument pre')).toContainText('ENCODED SEAL:');
+    await page.locator('[data-remote="collect"]').click();
     const cipher=(await page.locator('.remoteDocument pre').textContent()).split(': ')[1];
     const answer=[...cipher].map(c=>String.fromCharCode(65+(c.charCodeAt(0)-65-shift+26)%26)).join('');
     await page.locator('#remoteAnswer').fill(answer);await page.locator('#remoteSolve button').click();await expect(page.locator('#remoteSolve button')).toHaveText('SEAL OPEN');
     await page.locator('[data-folder="vault"]').click();await page.locator('[data-file="payload.arc"]').click();await expect(page.locator('.remoteDocument pre')).toContainText('Encrypted recovery payload');await page.screenshot({path:'test-results/remote-files.png'});
+    await page.locator('[data-remote="collect"]').click();
     await page.locator('[data-remote="extract"]').click();await expect(page.locator('.remoteEmpty')).toBeVisible();
-    await page.locator('[data-tab="market"]').click();await page.locator('[data-evidence]').click();await expect(page.locator('[data-evidence]')).toHaveText('SOLD');expect(room.ledger.contracts).toBe(240);expect(errors).toEqual([]);
+    await page.locator('[data-tab="market"]').click();await page.locator('[data-evidence]').click();await expect(page.locator('[data-evidence]')).toHaveText('SOLD');expect(room.ledger.contracts).toBe(340);expect(errors).toEqual([]);
   }finally{await page.close();await game.close();}
 });
 
@@ -37,7 +40,7 @@ test('a window encounter interrupts the computer with a visible personal scare',
   const game=createApp();await new Promise(r=>game.http.listen(0,'127.0.0.1',r));
   try{
     await page.goto('/');await page.locator('#serverUrl').fill('http://127.0.0.1:'+game.http.address().port);await page.locator('#createRoom').click();await expect(page.locator('#lobby')).toBeHidden();await page.locator('#quality').selectOption('low');await page.locator('#guideOkay').click();
-    const room=[...game.rooms.values()][0];room.nextEvent=Infinity;room.horror.recoveryUntil=0;
+    const room=[...game.rooms.values()][0];room.nextEvent=Infinity;room.stalkerUsed=true;for(const t of Object.values(room.remoteTargets))t.activeOwner=false;room.horror.recoveryUntil=0;
     await expect(page.locator('#prompt')).toContainText('WORKSTATION');await page.keyboard.press('e');await expect(page.locator('#panel')).toBeVisible();
     startEncounter(room,'window');await expect(page.locator('#horrorStatus')).toContainText('PROWLER');
     room.horror.active.attackAt=Date.now()-1;room.horror.active.ends=Date.now()+10000;
@@ -50,7 +53,7 @@ test('wallet attacks require the open computer and do not follow the player afte
   test.setTimeout(70000);const game=createApp();await new Promise(r=>game.http.listen(0,'127.0.0.1',r));
   try{
     await page.goto('/');await page.locator('#serverUrl').fill('http://127.0.0.1:'+game.http.address().port);await page.locator('#createRoom').click();await expect(page.locator('#lobby')).toBeHidden();await page.locator('#quality').selectOption('low');await page.locator('#guideOkay').click();
-    const room=[...game.rooms.values()][0],id=Object.keys(room.players)[0];room.nextEvent=Infinity;room.nextHack=0;room.horror.recoveryUntil=0;
+    const room=[...game.rooms.values()][0],id=Object.keys(room.players)[0];room.nextEvent=Infinity;room.stalkerUsed=true;for(const t of Object.values(room.remoteTargets))t.activeOwner=false;room.nextHack=0;room.horror.recoveryUntil=0;
     expect(beginIntrusion(room,id)).toBe(false);await expect(page.locator('#intrusion')).toBeHidden();
     await expect(page.locator('#prompt')).toContainText('WORKSTATION');await page.keyboard.press('e');await expect.poll(()=>room.players[id].computerOpen).toBe(true);expect(beginIntrusion(room,id)).toBe(true);
     await expect(page.locator('#intrusion')).toBeVisible();const cooldown=room.nextHack;await page.keyboard.press('Escape');await expect(page.locator('#intrusion')).toBeHidden();await expect(page.locator('#panel')).toBeHidden();await expect.poll(()=>room.players[id].computerOpen).toBe(false);
