@@ -51,7 +51,7 @@ export function publicState(room,id){
 function beginIntrusion(room,id){
   if(room.intrusions[id] || !room.players[id])return false;
   const sequence=Array.from({length:6+Math.floor(Math.random()*2)},()=>pick(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown']));
-  room.intrusions[id]={sequence,index:0,expires:Date.now()+6500};
+  room.intrusions[id]={sequence,index:0,expires:Date.now()+9500};
   log(room,'INTRUSION ALERT: '+room.players[id].name+"'s workstation is under attack!");
   room.heat=clamp(room.heat+3,0,100);return true;
 }

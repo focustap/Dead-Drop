@@ -100,7 +100,7 @@ export class World{
       this.renderer.render(this.scene,this.security.camera()||this.camera);
     };loop();
   }
-  setView(mode){this.view=mode==='alley'||mode==='peephole'?mode:null;this.security.setView(this.view);this.keys.clear();}
+  setView(mode){this.view=mode==='alley'||mode==='peephole'?mode:null;this.security.setView(this.view);this.keys.clear();if(!this.view){this.near=this.nearby();this.callbacks.onFocus?.(this.near);}}
   setVisitors(alley,door){this.security.setVisitors(alley,door);}
   nearby(){
     let best=null,score=-1;const dir=new THREE.Vector3(0,0,-1).applyEuler(this.camera.rotation);const p=this.pos;

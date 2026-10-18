@@ -6,7 +6,7 @@ const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const fmt=n=>'$'+Math.max(0,Math.floor(n||0)).toLocaleString();
 let state=null,local=null,self=null,socket=null,remote=false,tab='terminal',panelOpen=false,guideOpen=false,viewOpen=null,active=false,toastTimeout=null;
 let termHistory=[{cmd:'',text:'DEAD DROP TERMINAL v0.1\nSYSTEM READY. Enter "help" to list commands.'}],scanBusy=false,nearby=null,lastIntrusion=false;
-let lastStateSignature='',inFlight=false;
+let lastStateSignature='',inFlight=false,marketCode='',marketResult='AWAITING INPUT...',marketSale='';
 const notify=text=>{const e=$('toast');e.textContent=text;e.classList.add('show');clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>e.classList.remove('show'),4000);};
 function rawState(){
   if(!local)return;
@@ -130,7 +130,7 @@ function viewTerminal(){
 }
 function market(){
   const found=state.discovered||[];
-  return '<div class="split"><div class="section"><div class="tag">EXCHANGE // RECORD MARKET</div><h3>VERIFY RECORD</h3><p>Test recovered REC-codes, then sell verified data.</p><form id="verifyForm" class="form"><input id="verifyInput" maxlength="25" placeholder="REC-XXXX-XXXX" autocomplete="off"><button>VERIFY</button></form><p id="verifyResult" class="green">AWAITING INPUT...</p><form id="sellForm" class="form"><input id="sellInput" maxlength="25" placeholder="REC-XXXX-XXXX"><button>SELL</button></form><p id="sellResult" class="muted"></p></div>'+
+  return '<div class="split"><div class="section"><div class="tag">EXCHANGE // RECORD MARKET</div><h3>VERIFY RECORD</h3><p>Test recovered REC-codes, then sell verified data.</p><form id="verifyForm" class="form"><input id="verifyInput" maxlength="25" placeholder="REC-XXXX-XXXX" autocomplete="off" value="'+esc(marketCode)+'"><button>VERIFY</button></form><p id="verifyResult" class="green">'+esc(marketResult)+'</p><form id="sellForm" class="form"><input id="sellInput" maxlength="25" placeholder="REC-XXXX-XXXX"><button>SELL</button></form><p id="sellResult" class="muted">'+esc(marketSale)+'</p></div>'+
     '<div class="section"><h3>RECOVERED RECORDS</h3><div class="list">'+(found.length?found.map(r=>'<div class="listing"><div><b>'+esc(r.code)+'</b><small>'+esc(r.target)+' · '+(r.sold?'SOLD':'UNVERIFIED / UNSOLD')+'</small></div><button data-verify="'+esc(r.code)+'">CHECK</button></div>').join(''):'<p>NO RECORDS YET. USE THE TERMINAL.</p>')+'</div></div></div>';
 }
 function production(){
@@ -164,9 +164,10 @@ function renderPanel(){
     $('terminalLog').scrollTop=$('terminalLog').scrollHeight;inp?.focus();
   }
   if(tab==='market'){
-    $('verifyForm').onsubmit=async e=>{e.preventDefault();const code=$('verifyInput').value;const r=await command('market:verify',{code});$('verifyResult').textContent=r.text;};
-    $('sellForm').onsubmit=async e=>{e.preventDefault();const code=$('sellInput').value;const r=await command('market:sell',{code});notify(r.text);renderPanel();};
-    document.querySelectorAll('[data-verify]').forEach(b=>b.onclick=()=>{$('verifyInput').value=b.dataset.verify;$('verifyForm').requestSubmit();});
+    $('verifyInput').oninput=e=>{marketCode=e.target.value;};
+    $('verifyForm').onsubmit=async e=>{e.preventDefault();const code=$('verifyInput').value;marketCode=code;const r=await command('market:verify',{code});marketResult=r.text;renderPanel();};
+    $('sellForm').onsubmit=async e=>{e.preventDefault();const code=$('sellInput').value;const r=await command('market:sell',{code});marketSale=r.text;notify(r.text);renderPanel();};
+    document.querySelectorAll('[data-verify]').forEach(b=>b.onclick=()=>{marketCode=b.dataset.verify;$('verifyInput').value=marketCode;$('verifyForm').requestSubmit();});
   }
   if(tab==='production'){
     document.querySelectorAll('[data-buy]').forEach(b=>b.onclick=async()=>{const r=await command('buy',{item:b.dataset.buy});notify(r.text);renderPanel();});
@@ -185,7 +186,7 @@ function renderIntrusion(){
   const arrows=$('arrows');
   arrows.innerHTML=a.sequence.map((key,i)=>'<span class="'+(i<a.index?'done':i===a.index?'current':'')+'">'+directions[key]+'</span>').join('');
   const remaining=Math.max(0,a.expires-Date.now());
-  $('timerFill').style.width=(remaining/6500*100)+'%';
+  $('timerFill').style.width=(remaining/9500*100)+'%';
   $('timerText').textContent=(remaining/1000).toFixed(1)+'s';
 }
 const world=new World($('scene'),{
