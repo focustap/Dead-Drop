@@ -2,10 +2,14 @@ import express from 'express';
 import {createServer} from 'node:http';
 import {randomBytes} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
+import path from 'node:path';
+import {existsSync} from 'node:fs';
 import {Server} from 'socket.io';
 import {newRoom,addPlayer,movePlayer,publicState,terminalCommand,gameAction,intrusionInput,tick} from '../shared/core.js';
 const root=fileURLToPath(new URL('../',import.meta.url));
-const app=express();app.disable('x-powered-by');app.use(express.static(root,{dotfiles:'deny'}));
+const app=express();app.disable('x-powered-by');
+const output=path.join(root,'dist');
+app.use(express.static(existsSync(output)?output:root,{dotfiles:'deny'}));
 app.get('/health',(_req,res)=>res.json({ok:true,game:'DEAD DROP',rooms:rooms.size}));
 const http=createServer(app);
 const io=new Server(http,{cors:{origin:process.env.ALLOWED_ORIGINS?.split(',').map(s=>s.trim()).filter(Boolean)||true,methods:['GET','POST']},

@@ -1,4 +1,5 @@
 import {World} from './world.js';
+import {io} from 'socket.io-client';
 import {newRoom,addPlayer,movePlayer,publicState,terminalCommand,gameAction,intrusionInput,tick} from '../shared/core.js';
 const $=id=>document.getElementById(id);
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -56,7 +57,6 @@ function refresh(){
     if(signature!==lastStateSignature){lastStateSignature=signature;renderPanel();}
   }
 }
-const loadScript=src=>new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=src;script.onload=resolve;script.onerror=reject;document.head.append(script);});
 async function start(mode){
   const alias=$('playerName').value.trim()||'Ghost',url=$('serverUrl').value.trim();
   if(mode==='solo'){
@@ -68,8 +68,7 @@ async function start(mode){
     const u=new URL(url);
     if(!['https:','http:'].includes(u.protocol)||u.username||u.password||u.pathname!=='/'||u.search||u.hash)throw Error('Use a server origin, like https://example.onrender.com');
     if(u.protocol==='http:'&&!['localhost','127.0.0.1'].includes(u.hostname))throw Error('Use HTTPS.');
-    if(!window.io)await loadScript('https://cdn.socket.io/4.8.1/socket.io.min.js');
-    const conn=window.io(u.origin,{transports:['websocket','polling'],timeout:18000,reconnection:true});
+    const conn=io(u.origin,{transports:['websocket','polling'],timeout:18000,reconnection:true});
     const timeout=setTimeout(()=>{if(!conn.connected)conn.disconnect();},22000);
     conn.on('connect_error',e=>notify('CONNECTION ERROR: '+e.message.slice(0,90)));
     conn.on('state',s=>receive(s));

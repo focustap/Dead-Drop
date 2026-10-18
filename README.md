@@ -32,7 +32,7 @@ Order supplies from Production, inspect the supply entrance, and collect parcels
 - HTML/CSS: in-game terminal and market interface.
 - Shared JavaScript logic: `shared/core.js` contains state, generated computers, scoring, inventory and threats.
 - Socket.IO + Node: optional server-authoritative co-op; solo runs the same core in-browser.
-- No OpenAI API or paid services required for this prototype.
+- Three.js and the multiplayer client are bundled locally into `dist/`; no external runtime CDN is needed. No AI API or paid services are required.
 
 This is **prototype 0.1**: the 3D room, navigation, customer-data searching, market verification, supply loop and one intrusion type. Persistence, sound design, threat animations, procedural complexity and production-grade reconnection will come later.
 
@@ -40,6 +40,7 @@ This is **prototype 0.1**: the 3D room, navigation, customer-data searching, mar
 ```bash
 npm install
 npm test
+npm run build
 npm start
 ```
 Open `http://localhost:3000/`.
