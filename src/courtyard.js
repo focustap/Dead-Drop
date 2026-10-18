@@ -8,7 +8,7 @@ function box(s,w,h,d,x,y,z,m){const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,
 export function human(s,coat){
   const p=character(s,coat,'intruder'),skin=material('#8e8272'),face=new THREE.Mesh(new THREE.SphereGeometry(.14,12,8),skin);
   face.scale.set(.8,1,.28);face.position.set(0,1.65,-.245);p.add(face);
-  box(p,.045,.07,.06,0,1.64,-.29,skin);
+  const nose=new THREE.Mesh(new THREE.SphereGeometry(.025,10,8),skin);nose.scale.set(.8,1.4,1);nose.position.set(0,1.64,-.29);p.add(nose);
   for(const x of [-.055,.055])box(p,.035,.016,.014,x,1.69,-.285,material('#17201e'));
   for(const arm of p.userData.arms){const hand=new THREE.Mesh(new THREE.SphereGeometry(.064,8,6),skin);hand.position.set(0,-.57,0);arm.add(hand);}
   s.add(p);return p;
@@ -101,7 +101,7 @@ export class Courtyard{
     this.pedestrians.forEach((p,i)=>{const cycle=((now-this.state.created)/1000+i*23)%57,walking=cycle<23;p.visible=walking||i===1&&cycle>47;if(!p.visible)return;
       const x=walking?-9+cycle/23*18:7;p.position.set(x,0,walking?15+i*3:19);p.rotation.y=turnToward(p.rotation.y,walking?-Math.PI/2:Math.PI,dt);p.userData.legs.forEach((leg,j)=>leg.rotation.x=walking?Math.sin(t*6)*.38*(j?1:-1):0);
     });
-    this.prowler.visible=a?.kind==='window';if(!this.prowler.visible)return;
+    this.prowler.visible=a?.kind==='window'&&a.phase!=='stalking';if(!this.prowler.visible)return;
     const retreat=a.phase==='retreating',hunting=a.phase==='hunting';
     const progress=retreat?Math.min(1,(now-a.retreatAt)/5500):Math.min(1,Math.max(0,(now-a.start)/8000));
     const q=progress*progress*(3-2*progress),from=Math.min(1,(a.retreatAt-a.start)/8000),travel=retreat?(from*from*(3-2*from))*(1-q):q;

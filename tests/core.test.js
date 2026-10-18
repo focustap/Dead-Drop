@@ -87,8 +87,8 @@ test('a complete physical crop requires soil, water, power, carrying and a separ
   assert.equal(r.garden.growth,100);gameAction(r,'p1','garden:harvest');assert.equal(r.players.p1.carrying,3);
   assert.equal(gameAction(r,'p1','garden:harvest').ok,false);assert.equal(gameAction(r,'p1','pack:deposit').ok,false);
   stand(r,'packaging');gameAction(r,'p1','pack:deposit');gameAction(r,'p1','pack:seal');assert.equal(r.inventory.packages,1);assert.equal(r.inventory.buds,2);
-  stand(r,'chute');r.alley=visitor('buyer',now-7000,'alley');const before=r.bank;
-  assert.equal(gameAction(r,'p1','alley:drop').ok,true);assert.equal(r.bank,before+210);assert.equal(r.ledger.deliveries,210);
+  gameAction(r,'p1','sales:list',{quantity:1});const buyer=r.sales.buyers.find(b=>b.quantity===1);gameAction(r,'p1','sales:accept',{id:buyer.id});const deal=r.sales.deals[0];now=deal.arrives;tick(r,now);stand(r,'chute');const before=r.bank;
+  assert.equal(gameAction(r,'p1','alley:drop').ok,true);assert.equal(r.bank,before+deal.price);assert.equal(r.ledger.deliveries,deal.price);
   assert.equal(gameAction(r,'p1','alley:drop').ok,false);
 });
 test('thieves cost shipments, an intruder costs bounded funds, and bracing has counterplay',()=>{
@@ -110,7 +110,7 @@ test('six nights settle only two wallet quotas and preserve upgrades',()=>{
   for(let day=1;day<=6;day++){
     if(day%3===0)r.bank=r.quota;
     const before=r.bank,heat=r.heat;tick(r,r.nightEnds);
-    assert.equal(r.phase,day===6?'won':'summary');
+    assert.equal(r.phase,day===6?'ending':'summary');
     assert.equal(r.bank,day%3===0?0:before);assert.equal(r.heat,heat);
     assert.equal(r.summary.quotaPaid,day%3===0?r.quota:0);
     assert.equal(r.quota,QUOTAS[Math.floor((day-1)/3)]);
@@ -135,24 +135,21 @@ test('recurring targets and contracts stay available, and tiers unlock through p
   const r=roomWithPlayer();r.day=3;tick(r,r.nextTarget);const fresh=Object.keys(r.targets).at(-1);assert.ok(r.targets[fresh].folders['.cache']);
   r.targets[fresh].tier=3;assert.match(terminalCommand(r,'p1','connect '+fresh).text,/decoder required/);
   r.upgrades.push('decoder');assert.match(terminalCommand(r,'p1','connect '+fresh).text,/ESTABLISHED/);
-  assert.ok(r.contracts.length>=3);assert.ok(r.orders.length>=3);
+  assert.ok(r.contracts.length>=2);assert.ok(r.sales.buyers.length>=3);assert.ok(Object.keys(r.remoteTargets).length===4);
   for(let i=0;i<20;i++){r.nightEnds=r.nextTarget+NIGHT_MS;tick(r,r.nextTarget);}
   assert.ok(Object.keys(r.targets).length<=12);assert.ok(r.targets[fresh]);
 });
-test('contract reservation and completion are atomic across two operators',t=>{
-  let now=Date.now();t.mock.method(Date,'now',()=>now);const r=roomWithPlayer();addPlayer(r,'p2','Peer');const job=r.contracts[0];job.type='memory';
+test('physical delivery contracts reserve once and never pay on acceptance',()=>{
+  const r=roomWithPlayer();addPlayer(r,'p2','Peer');const job=r.contracts.find(j=>j.type==='delivery'),bank=r.bank;
   assert.equal(gameAction(r,'p1','contract:start',{id:job.id}).ok,true);assert.equal(gameAction(r,'p2','contract:start',{id:job.id}).ok,false);
-  const sequence=[...r.challenges.p1.sequence];assert.equal(gameAction(r,'p1','contract:input',{key:sequence[0]}).ok,false);now+=3100;
-  for(const key of sequence)assert.equal(gameAction(r,'p1','contract:input',{key}).ok,true);
-  assert.equal(r.ledger.contracts,job.payout);assert.equal(gameAction(r,'p2','contract:start',{id:job.id}).ok,false);
-  assert.equal(gameAction(r,'p1','contract:input',{key:sequence[0]}).ok,false);
+  assert.equal(gameAction(r,'p1','contract:deliver',{id:job.id}).ok,false);assert.equal(r.bank,bank);assert.equal(r.ledger.contracts,0);
 });
-test('carrier intercept uses server time and accepts only the timing window',t=>{
-  let now=Date.now();t.mock.method(Date,'now',()=>now);const r=roomWithPlayer();r.contracts[0].type='pulse';
-  gameAction(r,'p1','contract:start',{id:r.contracts[0].id});assert.equal(gameAction(r,'p1','contract:input',{time:now+3000}).ok,false);
-  r.contracts[1].type='pulse';gameAction(r,'p1','contract:start',{id:r.contracts[1].id});now+=3000;
-  assert.equal(gameAction(r,'p1','contract:input').ok,true);assert.equal(r.ledger.contracts,r.contracts[1].payout);
+test('contract deadlines use authoritative time and charge one disclosed penalty',t=>{
+  let now=Date.now();t.mock.method(Date,'now',()=>now);const r=roomWithPlayer(),job=r.contracts.find(j=>j.type==='delivery');r.nextEvent=Infinity;
+  gameAction(r,'p1','contract:start',{id:job.id});now=job.deadline+1;tick(r,now);assert.equal(job.failed,true);assert.equal(r.bank,185-job.penalty);
+  tick(r,now+100);assert.equal(r.bank,185-job.penalty);assert.equal(gameAction(r,'p1','contract:deliver',{id:job.id,time:0}).ok,false);
 });
+
 test('power warning can be countered and public state keeps personal sessions private',()=>{
   const r=roomWithPlayer();addPlayer(r,'p2','Peer');terminalCommand(r,'p1','connect NOVA-17');
   r.environment.warning={at:Date.now()+1000};stand(r,'breaker');gameAction(r,'p1','breaker:reset');tick(r,Date.now()+1500);assert.equal(r.environment.power,true);

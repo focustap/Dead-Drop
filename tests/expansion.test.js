@@ -5,7 +5,7 @@ import {startEncounter,THREATS} from '../shared/horror.js';
 import {STATIONS,slide} from '../shared/layout.js';
 import {visitorMotion,turnToward} from '../shared/npc.js';
 import {visitor} from '../shared/campaign.js';
-const setup=t=>{let now=Date.now();t.mock.method(Date,'now',()=>now);const r=newRoom();addPlayer(r,'a','A');addPlayer(r,'b','B');gameAction(r,'a','start');r.nextEvent=Infinity;r.horror.recoveryUntil=0;return {r,get now(){return now;},advance(ms){now+=ms;tick(r,now);}};};
+const setup=t=>{let now=Date.now();t.mock.method(Date,'now',()=>now);const r=newRoom();addPlayer(r,'a','A');addPlayer(r,'b','B');gameAction(r,'a','start');r.stalkerUsed=true;r.nextEvent=Infinity;r.horror.recoveryUntil=0;return {r,get now(){return now;},advance(ms){now+=ms;tick(r,now);}};};
 const stand=(r,key,id='a')=>Object.assign(r.players[id],STATIONS[key]);
 test('normal visitor deadlines reject late courier pickups and alley drops',t=>{
   const c=setup(t),{r}=c;stand(r,'door');r.pending=[{item:'seeds',amount:2,arrives:c.now-1000}];r.door=visitor('courier',c.now-25000,'door');
@@ -57,15 +57,17 @@ function connect(r,type){const target=Object.values(r.remoteTargets).find(t=>t.t
 test('remote archive requires circuit, documents, decoded seal, extraction and one shared sale',t=>{
   const {r}=setup(t),target=connect(r,'archive');assert.equal(gameAction(r,'b','remote:start',{id:target.id}).ok,false);
   gameAction(r,'a','remote:folder',{folder:'vault'});gameAction(r,'a','remote:read',{file:'payload.arc'});assert.equal(gameAction(r,'a','remote:extract').ok,false);
-  gameAction(r,'a','remote:solve',{answer:target.solution});assert.equal(gameAction(r,'a','remote:extract').ok,true);assert.equal(r.ledger.contracts,0);
+  gameAction(r,'a','remote:solve',{answer:target.solution});for(const path of ['mail/key-memo.txt','logs/seal.txt','vault/payload.arc']){const [folder,file]=path.split('/');gameAction(r,'a','remote:folder',{folder});gameAction(r,'a','remote:read',{file});gameAction(r,'a','remote:collect');}assert.equal(gameAction(r,'a','remote:extract').ok,true);assert.equal(r.ledger.contracts,0);
   assert.equal(gameAction(r,'b','remote:sell',{id:target.id}).ok,true);assert.equal(gameAction(r,'a','remote:sell',{id:target.id}).ok,false);assert.equal(r.ledger.contracts,target.payout);
   assert.equal(gameAction(r,'a','remote:start',{id:target.id}).ok,false);
 });
-test('investigation decoys add trace, correct evidence pays; solution data stays server-side',t=>{
-  const {r}=setup(t),target=connect(r,'investigation');gameAction(r,'a','remote:folder',{folder:'vault'});gameAction(r,'a','remote:read',{file:Object.keys(target.files.vault).find(f=>'vault/'+f!==target.valuable)});assert.equal(gameAction(r,'a','remote:extract').ok,false);
-  gameAction(r,'a','remote:read',{file:target.valuable.split('/')[1]});assert.equal(gameAction(r,'a','remote:extract').ok,true);
-  const state=publicState(r,'b');assert.equal(state.remoteTargets,undefined);assert.equal(state.remoteSessions,undefined);assert.equal(state.remoteSession,null);assert.ok(!JSON.stringify(state.remoteListings).includes(target.solution));
+test('incorrect investigation evidence fails immediately and private solutions stay hidden',t=>{
+  const {r}=setup(t),target=connect(r,'investigation'),bank=r.bank;
+  const state=publicState(r,'a');assert.equal(state.remoteTargets,undefined);assert.equal(state.remoteSessions,undefined);assert.ok(!JSON.stringify(state.remoteSession).includes(target.valuable));
+  gameAction(r,'a','remote:folder',{folder:'vault'});gameAction(r,'a','remote:read',{file:Object.keys(target.files.vault).find(f=>'vault/'+f!==target.valuable)});assert.equal(gameAction(r,'a','remote:extract').ok,false);
+  assert.equal(target.burned,true);assert.equal(r.bank,bank-target.penalty);assert.equal(r.remoteSessions.a,undefined);
 });
+
 test('trace job reconstructs several files; failed puzzles burn after three guesses',t=>{
   const {r}=setup(t),target=connect(r,'trace');gameAction(r,'a','remote:folder',{folder:'logs'});assert.equal(publicState(r,'a').remoteSession.files.length,3);
   for(let i=0;i<3;i++)assert.equal(gameAction(r,'a','remote:solve',{answer:'wrong'}).ok,false);assert.equal(r.remoteSessions.a,undefined);assert.equal(target.burned,true);assert.equal(gameAction(r,'b','remote:start',{id:target.id}).ok,false);
@@ -77,5 +79,5 @@ test('remote lease pauses for physical danger and power loss, but expires during
 test('inherited remote ids cannot corrupt money, and scrape cooldown prevents spam',t=>{
   const {r}=setup(t);for(const id of ['__proto__','constructor','toString'])for(const action of ['remote:start','remote:sell'])assert.equal(gameAction(r,'a',action,{id}).ok,false);
   assert.equal(r.bank,185);terminalCommand(r,'a','connect NOVA-17');terminalCommand(r,'a','scrape finances');assert.match(terminalCommand(r,'a','scrape backups').text,/cooling/);assert.equal(r.scans,1);
-  assert.equal(THREATS.length,9);
+  assert.equal(THREATS.length,12);
 });

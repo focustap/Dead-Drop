@@ -1,4 +1,5 @@
-import {remoteView} from './remote.js';
+import {bindBlackMarket} from './blackmarket.js';
+import {remoteView,bindDesktop} from './remote.js';
 import {browserView,resolveSite} from './browser.js';
 import {Soundscape} from './audio.js';
 import {World} from './world.js';
@@ -10,7 +11,7 @@ const fmt=n=>'$'+Math.max(0,Math.floor(n||0)).toLocaleString();
 const audio=new Soundscape();
 let lastScare=null,curtainHolding=false,curtainPulsePending=false,lastCollector=null;
 let stationOpen=null,site='market',browserHistory=[],summaryKey='',serverOffset=0,stationSignature='',lastRenderedView='';
-let settings={sensitivity:1,volume:.35,quality:'medium'};try{Object.assign(settings,JSON.parse(localStorage.getItem('dead-drop-settings')||'{}'));}catch{}
+let settings={sensitivity:1,volume:.35,quality:'medium',reducedEffects:false};try{Object.assign(settings,JSON.parse(localStorage.getItem('dead-drop-settings')||'{}'));}catch{}
 const gameNow=()=>Date.now()+serverOffset;
 let state=null,local=null,self=null,socket=null,remote=false,tab='terminal',panelOpen=false,guideOpen=false,viewOpen=null,active=false,toastTimeout=null;
 let termHistory=[{cmd:'',text:'DEAD DROP TERMINAL v0.3\nSYSTEM READY. Enter "help" to list commands.'}],scanBusy=false,nearby=null,lastIntrusion=false;
@@ -41,7 +42,8 @@ function updateHud(){
   $('quotaDue').textContent='CYCLE '+(Math.floor((state.day-1)/3)+1)+(state.summary?.quotaPaid?' PAID':' / '+state.nightsRemaining+' NIGHT'+(state.nightsRemaining===1?'':'S')+' LEFT');
   $('quotaFill').style.width=(state.summary?.quotaPaid?100:Math.min(100,state.bank/state.quota*100))+'%';
   $('carry').textContent=state.players.find(p=>p.id===self)?.carrying?'CARRYING HARVEST → PACKING TABLE':'';
-  renderStation();renderSummary();renderHorror();
+  renderStation();renderSummary();renderHorror();renderEnding();
+  if(viewOpen==='peephole')audio.peep(state.horror.peep,gameNow());
   if(viewOpen){
     const v=viewOpen==='alley'?state.alley?.visitor:state.door?.visitor;
     $('surveillance').dataset.visitor=v||'empty';
@@ -67,7 +69,7 @@ async function command(event,payload={}){
   return response;
 }
 function enter(){
-  active=true;audio.start();audio.setVolume(Number(settings.volume));world.applySettings(settings);$('hud').classList.remove('hidden');$('lobby').classList.add('hidden');
+  active=true;audio.start();audio.setVolume(Number(settings.volume));audio.reducedEffects=!!settings.reducedEffects;document.body.classList.toggle('reducedEffects',!!settings.reducedEffects);world.applySettings(settings);$('hud').classList.remove('hidden');$('lobby').classList.add('hidden');
   $('lookPrompt')?.remove();$('prompt').textContent='CLICK TO LOOK AROUND · WASD TO MOVE';
   const current=state.players?.find(p=>p.id===self);
   world.pos.set(current?.x??-1.2,1.65,current?.z??-.75);world.yaw=current?.yaw||0;
@@ -76,12 +78,12 @@ function enter(){
 }
 function refresh(){
   if(!state)return;
-  updateHud();renderChallenge();
+  updateHud();
   const intr=panelOpen?state.intrusion:null;
   if(intr&&!lastIntrusion){audio.alarm();if(viewOpen)closeView();lastIntrusion=true;document.exitPointerLock?.();$('intrusion').classList.remove('hidden');$('panel').classList.add('hidden');notify('INTRUSION DETECTED');}
   else if(!intr&&lastIntrusion){lastIntrusion=false;$('intrusion').classList.add('hidden');if(panelOpen)$('panel').classList.remove('hidden');notify('SYSTEM RESPONSE COMPLETE');}
-  if(panelOpen&&!intr&&!inFlight){
-    const signature=JSON.stringify([tab,state.bank,state.heat,state.inventory,state.messages,state.contracts,state.orders,state.pending,state.door,state.alley,state.upgrades,state.terminal,state.discovered,state.remoteListings,state.remoteSession,state.extracted,state.log?.[0]?.id]);
+  if(panelOpen&&!intr&&!inFlight&&!$('computerView').querySelector('[data-dragging="true"]')){
+    const signature=JSON.stringify([tab,state.bank,state.heat,state.inventory,state.messages,state.contracts,state.orders,state.pending,state.door,state.alley,state.upgrades,state.terminal,state.discovered,state.remoteListings,state.remoteSession?{...state.remoteSession,suspicion:Math.ceil(state.remoteSession.suspicion),ownerActivity:state.remoteSession.ownerActivity.phase}:null,state.exchange,state.sales,state.extracted,state.log?.[0]?.id]);
     if(signature!==lastStateSignature){lastStateSignature=signature;renderPanel();}
   }
 }
@@ -121,10 +123,11 @@ async function openPanel(which='terminal'){
   $('panel').classList.remove('hidden');
   renderPanel();
 }
-function closePanel(){const wasOpen=panelOpen;panelOpen=false;$('panel').classList.add('hidden');if(wasOpen){void command('computer:leave');if(state?.challenge)void command('contract:cancel');}}
+function closePanel(){const wasOpen=panelOpen;panelOpen=false;$('panel').classList.add('hidden');if(wasOpen){void command('computer:leave');}}
 function openView(mode){
   if(!state||state.intrusion||state.phase!=='night')return;
   release();closePanel();
+  if(mode==='peephole')void command('door:peek');
   viewOpen=mode;world.setView(mode);
   const overlay=$('surveillance');overlay.classList.remove('hidden');overlay.dataset.view=mode;
   $('surveillanceName').textContent=mode==='alley'?'CAM 01 // BACK ALLEY':'SUPPLY DOOR // PEEPHOLE';
@@ -132,7 +135,7 @@ function openView(mode){
   $('surveillanceInstruction').textContent=mode==='alley'?'RAIN MONITORING ACTIVE':'LOOK THROUGH THE DOOR';
   updateHud();
 }
-function closeView(){if(!viewOpen)return;viewOpen=null;world.setView(null);$('surveillance').classList.add('hidden');}
+function closeView(){if(!viewOpen)return;if(viewOpen==='peephole')void command('door:unpeek');viewOpen=null;world.setView(null);$('surveillance').classList.add('hidden');}
 function openGuide(){release();if(panelOpen)closePanel();guideOpen=true;$('guide').classList.remove('hidden');}
 function closeGuide(){guideOpen=false;$('guide').classList.add('hidden');}
 function goInteract(t){
@@ -156,7 +159,7 @@ function viewTerminal(){
     '<div id="terminalLog" class="terminalLog">'+termHistory.map(e=>'<div class="cmd">'+(e.cmd?'root@dead-drop:~$ '+esc(e.cmd):'')+'</div><div class="output">'+esc(e.text)+'</div>').join('')+'</div>'+
     '<form id="terminalForm" class="consoleForm"><label for="terminalInput">root@'+esc(prefix)+':~$</label><input id="terminalInput" autocomplete="off" spellcheck="false" maxlength="140" placeholder="type help"><button aria-label="Execute command">↵</button></form></div>';
 }
-function evidence(){return '<div class="section"><h3>LOCAL EVIDENCE</h3>'+state.extracted.map(x=>`<div class="listing"><div><b>${esc(x.title)}</b><small>${esc(x.from)}</small></div><button data-evidence="${esc(x.id)}" ${x.sold?'disabled':''}>${x.sold?'SOLD':'SELL $'+x.payout}</button></div>`).join('')+'</div>';}
+function evidence(){return '<div class="section"><h3>LOCAL EVIDENCE</h3>'+state.extracted.map(x=>`<div class="listing"><div><b>${esc(x.title)}</b><small>${esc(x.from)} / ${x.failed?'DEADLINE MISSED':'DELIVER BEFORE LEASE EXPIRES'}</small></div><button data-evidence="${esc(x.id)}" ${x.sold||x.failed?'disabled':''}>${x.sold?'SOLD':x.failed?'EXPIRED':'SELL $'+x.payout}</button></div>`).join('')+'</div>';}
 function market(){
   const found=state.discovered||[];
   return evidence()+'<div class="split"><div class="section"><div class="tag">EXCHANGE // RECORD MARKET</div><h3>VERIFY RECORD</h3><p>Test recovered REC-codes, then sell verified data.</p><form id="verifyForm" class="form"><input id="verifyInput" maxlength="25" placeholder="REC-XXXX-XXXX" autocomplete="off" value="'+esc(marketCode)+'"><button>VERIFY</button></form><p id="verifyResult" class="green">'+esc(marketResult)+'</p><form id="sellForm" class="form"><input id="sellInput" maxlength="25" placeholder="REC-XXXX-XXXX"><button>SELL</button></form><p id="sellResult" class="muted">'+esc(marketSale)+'</p></div>'+
@@ -167,7 +170,7 @@ function security(){
     '<div class="section"><div class="tag">SUPPLY ENTRANCE</div><h3>PEEPHOLE</h3><p>Walk to the supply door to use its peephole. Couriers carry a parcel.</p><div class="form"></div><p>Incoming orders: '+state.pending.length+'</p></div></div><div class="section"><h3>HIDEOUT ACTIVITY</h3><div class="list">'+state.log.slice(0,7).map(e=>'<div class="listing">'+esc(e.text)+'</div>').join('')+'</div></div>';
 }
 function renderPanel(){
-  if(!panelOpen||state?.intrusion)return;
+  if(!panelOpen||state?.intrusion||$('computerView').querySelector('[data-dragging="true"]'))return;
   const sameView=lastRenderedView===tab+':'+site,focused=document.activeElement?.id;
   const drafts=sameView?[...$('computerView').querySelectorAll('input')].map(el=>({id:el.id,value:el.value,start:el.selectionStart,end:el.selectionEnd})):[];
   lastRenderedView=tab+':'+site;
@@ -195,6 +198,7 @@ function renderPanel(){
     el.querySelectorAll('[data-file]').forEach(b=>b.onclick=()=>act('read',{file:b.dataset.file}));
     el.querySelectorAll('[data-remote]').forEach(b=>b.onclick=()=>act(b.dataset.remote));
     if($('remoteSolve'))$('remoteSolve').onsubmit=e=>{e.preventDefault();act('solve',{answer:$('remoteAnswer').value});};
+    bindDesktop(el,state.remoteSession,act);
     if($('findRemote'))$('findRemote').onclick=()=>navigate('contracts');
   }
   if(tab==='market'||(tab==='browser'&&site==='records')){
@@ -204,6 +208,7 @@ function renderPanel(){
     document.querySelectorAll('[data-verify]').forEach(b=>b.onclick=()=>{marketCode=b.dataset.verify;$('verifyInput').value=marketCode;$('verifyForm').requestSubmit();});
   }
   if(tab==='browser'){
+    bindBlackMarket(el,state,command,notify,renderPanel);
     el.querySelectorAll('[data-remote-target]').forEach(b=>b.onclick=async()=>{const r=await command('remote:start',{id:b.dataset.remoteTarget});notify(r.text);if(r.ok){tab='remote';renderPanel();}});
     el.querySelectorAll('[data-buy]').forEach(b=>b.onclick=async()=>{const r=await command('buy',{item:b.dataset.buy});notify(r.text);renderPanel();});
     el.querySelectorAll('[data-site]').forEach(b=>b.onclick=()=>navigate(b.dataset.site));
@@ -215,7 +220,7 @@ function renderPanel(){
   if(tab==='security'){
     $('viewAlley').onclick=()=>openView('alley');
   }
-  for(const draft of drafts){const input=$(draft.id);if(input){input.value=draft.value;if(draft.id===focused){input.focus({preventScroll:true});input.setSelectionRange(draft.start,draft.end);}}}
+  for(const draft of drafts){const input=$(draft.id);if(input){input.value=draft.value;if(draft.id===focused){input.focus({preventScroll:true});if(draft.start!==null)input.setSelectionRange(draft.start,draft.end);}}}
 }
 function renderIntrusion(){
   const a=state?.intrusion;
@@ -255,24 +260,15 @@ function renderSummary(){
   const s=state.summary;
   $('summaryTitle').textContent=state.phase==='won'?'THE CREW GOT OUT':state.phase==='lost'?'THE LINE WENT DEAD':'DAWN / NIGHT '+s.day;
   $('summaryText').textContent=state.reason||(s.cycleEnd?'Quota paid. The next three nights are yours.':s.nightsRemaining+' night'+(s.nightsRemaining===1?'':'s')+' left. Keep the quota money in your wallet.');
-  $('summaryLedger').innerHTML=[['ARCHIVE SALES',s.hacking],['CONTRACTS',s.contracts],['DELIVERIES',s.deliveries],['SUPPLIES / EQUIPMENT',-(s.expenses-s.quotaPaid)],['QUOTA PAYMENT',-s.quotaPaid],['LOSSES',-s.losses],['NET',s.net]].map(([label,value])=>`<div><span>${label}</span><b>${value<0?'−':''}${fmt(Math.abs(value))}</b></div>`).join('')+`<p>SHIFT INCOME ${fmt(s.gross)}<br>CYCLE QUOTA ${fmt(s.quota)} ${s.quotaPaid?'PAID':'DUE AFTER NIGHT '+(state.day<=3?'3':'6')}<br>WALLET ${fmt(s.bank)}</p>`;
+  $('summaryLedger').innerHTML=[['ARCHIVE SALES',s.hacking],['SHARE SALES',s.trading||0],['CONTRACTS',s.contracts],['DELIVERIES',s.deliveries],['SUPPLIES / EQUIPMENT',-(s.expenses-s.quotaPaid)],['QUOTA PAYMENT',-s.quotaPaid],['LOSSES',-s.losses],['NET',s.net]].map(([label,value])=>`<div><span>${label}</span><b>${value<0?'−':''}${fmt(Math.abs(value))}</b></div>`).join('')+`<p>SHIFT INCOME ${fmt(s.gross)}<br>CYCLE QUOTA ${fmt(s.quota)} ${s.quotaPaid?'PAID':'DUE AFTER NIGHT '+(state.day<=3?'3':'6')}<br>WALLET ${fmt(s.bank)}</p>`;
+  if(state.phase==='won'){$('summaryLedger').innerHTML+=`<p>CREW ${state.players.map(p=>esc(p.name)).join(' / ')}<br>${state.history.length} NIGHTS SURVIVED / ${state.loop||0} HARDER CAMPAIGNS<br>TOTAL QUOTAS PAID ${fmt(state.history.reduce((n,h)=>n+h.quotaPaid,0))}<br>TOTAL OPERATION INCOME ${fmt(state.history.reduce((n,h)=>n+h.gross,0))}</p><p>DEAD DROP · focustap<br>Thank you for playing.</p>`;}
   $('nextNight').classList.toggle('hidden',state.phase!=='summary');
 }
-function renderChallenge(){
-  const c=state?.challenge;$('contractChallenge').classList.toggle('hidden',!c);if(!c)return;
-  release();const now=gameNow(),revealing=now<c.revealUntil;
-  $('challengeTitle').textContent=c.type==='memory'?'MEMORY RELAY':'CARRIER INTERCEPT';
-  $('challengeStatus').textContent=c.type==='memory'?(revealing?'REMEMBER '+c.sequence.join(' · '):'REPEAT THE SIGNAL / '+c.index+' RECEIVED'):'STOP WHEN THE CARRIER REACHES THE GREEN BAND';
-  $('challengeClock').textContent=Math.max(0,(c.expires-now)/1000).toFixed(1)+'s';
-  $('memoryKeys').classList.toggle('hidden',c.type!=='memory');$('pulseControl').classList.toggle('hidden',c.type!=='pulse');
-  $('memoryKeys').querySelectorAll('button').forEach(b=>b.disabled=revealing);
-  $('carrier').style.left=Math.max(0,Math.min(100,(now-(c.windowStart-2800))/6000*100))+'%';
-}
 const world=new World($('scene'),{
-  canMove:()=>!curtainHolding&&!state?.players.find(p=>p.id===self)?.hidden&&!(state?.players.find(p=>p.id===self)?.stunnedUntil>gameNow())&&active&&(!remote||socket?.connected)&&state?.phase==='night'&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&!state?.intrusion&&!state?.challenge,
+  canMove:()=>!curtainHolding&&!state?.players.find(p=>p.id===self)?.hidden&&!(state?.players.find(p=>p.id===self)?.stunnedUntil>gameNow())&&active&&(!remote||socket?.connected)&&state?.phase==='night'&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&!state?.intrusion,
   onLock:locked=>{if(!active)return;if(!locked&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&!state?.intrusion)$('prompt').textContent='CLICK ROOM TO LOOK · WASD MOVE';},
   onMove:pos=>{if(remote){if(socket?.connected)socket.emit('player:move',pos);}else if(local){movePlayer(local,self,pos);}},
-  onFocus:focus=>{nearby=focus;if(!(state?.players.find(p=>p.id===self)?.stunnedUntil>gameNow())&&active&&state?.phase==='night'&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&!state?.intrusion&&!state?.challenge)$('prompt').textContent=focus?(focus.id==='curtains'?'[HOLD E] KEEP CURTAINS SHUT':'[E] '+focus.label):(document.pointerLockElement===world.renderer.domElement?'':'CLICK ROOM TO LOOK · WASD MOVE');else $('prompt').textContent='';}
+  onFocus:focus=>{nearby=focus;if(!(state?.players.find(p=>p.id===self)?.stunnedUntil>gameNow())&&active&&state?.phase==='night'&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&!state?.intrusion)$('prompt').textContent=focus?(focus.id==='curtains'?'[HOLD E] KEEP CURTAINS SHUT':'[E] '+focus.label):(document.pointerLockElement===world.renderer.domElement?'':'CLICK ROOM TO LOOK · WASD MOVE');else $('prompt').textContent='';}
 });
 window.addEventListener('keydown',async e=>{
   if(state?.players.find(p=>p.id===self)?.hidden){if(e.code==='KeyE'||e.key==='Escape'){e.preventDefault();await command('hide:leave');}return;}
@@ -290,7 +286,7 @@ window.addEventListener('keydown',async e=>{
     if(panelOpen){closePanel();return;}
     openGuide();return;
   }
-  if(e.code==='KeyE'&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&active&&state?.phase==='night'&&!state?.challenge){e.preventDefault();if(nearby?.id==='curtains'){if(!e.repeat&&!curtainHolding){curtainHolding=true;audio.tone(190,.45,.06);world.keys.clear();void pulseCurtains();}return;}goInteract(nearby);}
+  if(e.code==='KeyE'&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&active&&state?.phase==='night'){e.preventDefault();if(nearby?.id==='curtains'){if(!e.repeat&&!curtainHolding){curtainHolding=true;audio.tone(190,.45,.06);world.keys.clear();void pulseCurtains();}return;}goInteract(nearby);}
 });
 $('solo').onclick=()=>start('solo');$('createRoom').onclick=()=>start('create');$('joinRoom').onclick=()=>start('join');
 $('closePanel').onclick=closePanel;
@@ -301,16 +297,14 @@ window.__deadDropReady = true;
 setInterval(()=>{
   if(!active)return;
   if(local){tick(local);rawState();}
-  renderIntrusion();renderChallenge();if(remote)updateHud();if($('remoteClock'))$('remoteClock').textContent=Math.ceil(Math.max(0,(state.remoteSession?.expires||gameNow())-gameNow())/1000)+'s '+(state.horror.active||!state.environment.power?'PAUSED':'LEASE');
+  renderIntrusion();document.querySelectorAll('[data-deadline]').forEach(el=>{el.textContent=Math.max(0,Math.ceil((Number(el.dataset.deadline)-gameNow())/1000))+'s';});if(remote)updateHud();if($('remoteClock'))$('remoteClock').textContent=Math.ceil(Math.max(0,(state.remoteSession?.expires||gameNow())-gameNow())/1000)+'s '+(state.horror.active||!state.environment.power?'PAUSED':'LEASE');
 },180);
 
 $('closeStation').onclick=closeStation;
 $('stationBody').onclick=async e=>{const b=e.target.closest('[data-action]');if(!b)return;const r=await command(b.dataset.action);$('stationFeedback').textContent=r.text;audio.tone(r.ok?500:120,.18,.12);world.stationFeedback(b.dataset.action);};
 $('nextNight').onclick=async()=>{const r=await command('night:next');notify(r.text);};
 $('returnLobby').onclick=()=>location.reload();
-$('memoryKeys').onclick=async e=>{const key=e.target.dataset.packet;if(key){const r=await command('contract:input',{key});if(!r.ok)notify(r.text);renderChallenge();}};
-$('stopCarrier').onclick=async()=>{const r=await command('contract:input');notify(r.text);renderChallenge();};
-for(const [id,key] of [['sensitivity','sensitivity'],['volume','volume'],['quality','quality']]){const el=$(id);el.value=settings[key];el.oninput=()=>{settings[key]=key==='quality'?el.value:Number(el.value);localStorage.setItem('dead-drop-settings',JSON.stringify(settings));world.applySettings(settings);audio.setVolume(settings.volume);};}
+for(const [id,key] of [['sensitivity','sensitivity'],['volume','volume'],['quality','quality'],['reducedEffects','reducedEffects']]){const el=$(id);if(key==='reducedEffects')el.checked=!!settings[key];else el.value=settings[key];el.oninput=()=>{settings[key]=key==='reducedEffects'?el.checked:key==='quality'?el.value:Number(el.value);localStorage.setItem('dead-drop-settings',JSON.stringify(settings));world.applySettings(settings);audio.setVolume(settings.volume);audio.reducedEffects=!!settings.reducedEffects;document.body.classList.toggle('reducedEffects',!!settings.reducedEffects);};}
 
 $('openDoorView').onclick=async()=>{const r=await command('door:open');notify(r.text);};
 $('braceDoorView').onclick=async()=>{const r=await command('door:brace');notify(r.text);};
@@ -321,19 +315,18 @@ function renderHorror(){
   $('enterHall').disabled=state.horror.locked;
   $('hiding').classList.toggle('hidden',!p?.hidden||state.phase!=='night');
   $('hideStatus').textContent=a?.kind==='window'?'KEEP STILL / '+(a.phase==='warning'?'TAPPING AT THE GLASS':Math.ceil(Math.max(0,a.ends-now)/1000)+'s UNTIL FOOTSTEPS FADE'):'QUIET / YOU CAN LEAVE';
-  const threatText=a?({door:'LATCH RATTLING / '+(state.horror.locked?'BOLT LOCKED':'BOLT UNLOCKED'),window:a.phase==='retreating'?'THE PROWLER IS LEAVING':a.phase==='warning'?'PROWLER OUTSIDE / HOLD E AT THE CURTAINS':'WINDOW BREACHED / FIND COVER',hall:a.phase==='warning'?'HEAVY FOOTSTEPS APPROACHING':'SHADOW IN THE HALLWAY / WAIT INSIDE',echo:'A SOUND FROM THE EMPTY ROOMS'})[a.kind]:'';
-  const held=state.curtains;if(curtainHolding&&(held?.closed||a?.kind!=='window'||a.phase==='hunting'))stopCurtains();
+  const threatText=a?({door:'LATCH RATTLING / '+(state.horror.locked?'BOLT LOCKED':'BOLT UNLOCKED'),window:a.phase==='retreating'?'THE PROWLER IS LEAVING':a.phase==='warning'?'PROWLER OUTSIDE / HOLD E AT THE CURTAINS':a.phase==='stalking'?'FOOTSTEPS CROSS THE ROOM':'WINDOW BREACHED / FIND COVER',hall:a.phase==='warning'?'HEAVY FOOTSTEPS APPROACHING':'SHADOW IN THE HALLWAY / WAIT INSIDE',echo:'A SOUND FROM THE EMPTY ROOMS'})[a.kind]:'';
+  const held=state.curtains;if(curtainHolding&&(held?.closed||a?.kind!=='window'||a.phase!=='warning'))stopCurtains();
   $('curtainHold').classList.toggle('hidden',!curtainHolding);$('curtainHoldText').textContent=held?.owner===self?'HOLD E / '+Math.min(5,(now-held.started)/1000).toFixed(1)+' / 5s':'TAKING THE CURTAINS';
   if(state.phase==='collector'){if(lastCollector!==state.collector.start){lastCollector=state.collector.start;closePanel();closeStation();closeView();closeGuide();release();audio.collector();} }
   $('horrorStatus').textContent=state.phase==='collector'?'QUOTA UNPAID / THE COLLECTOR IS HERE':threatText;$('horrorStatus').classList.toggle('hidden',!a&&state.phase!=='collector');
   const caught=p?.scare&&p.scare.until>now;$('scareShade').classList.toggle('hidden',!caught);
-  if(caught&&lastScare!==state.day+':'+p.scare.id){lastScare=state.day+':'+p.scare.id;closePanel();closeStation();closeView();closeGuide();release();if(p.scare.kind==='collector')audio.collector();else audio.scare();notify(p.scare.kind==='collector'?'The Collector has come for payment.':'You were found. Catch your breath.');}
+  if(caught&&lastScare!==state.day+':'+p.scare.id){lastScare=state.day+':'+p.scare.id;closePanel();closeStation();closeView();closeGuide();release();if(p.scare.kind==='collector')audio.sting('collector');else audio.sting(p.scare.kind);notify(p.scare.kind==='collector'?'The Collector has come for payment.':'You were found. Catch your breath.');}
 }
 $('toggleBolt').onclick=async()=>{const r=await command(state.horror.locked?'door:unlock':'door:lock');notify(r.text);};
 $('enterHall').onclick=async()=>{const r=await command('hall:enter');notify(r.text);if(r.ok)closeView();};
 $('leaveHide').onclick=()=>command('hide:leave');
 
-$('cancelContract').onclick=()=>command('contract:cancel');
 
 async function pulseCurtains(){
   if(!curtainHolding||curtainPulsePending)return;curtainPulsePending=true;
@@ -344,3 +337,16 @@ window.addEventListener('keyup',e=>{if(e.code==='KeyE')stopCurtains();});
 window.addEventListener('blur',()=>{stopCurtains();if(panelOpen)closePanel();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){stopCurtains();if(panelOpen)closePanel();}});
 setInterval(()=>{if(curtainHolding)void pulseCurtains();},250);
+
+let endingEntered=null,endingStage=-1;
+function renderEnding(){
+  const shown=state.phase==='ending',el=$('ending');el.classList.toggle('hidden',!shown);if(!shown){endingEntered=null;endingStage=-1;return;}
+  const age=gameNow()-state.ending.start,stage=age<3500?0:age<7000?1:age<12000?2:3;
+  if(endingEntered!==state.ending.start){endingEntered=state.ending.start;release();closePanel();closeStation();closeView();closeGuide();}
+  if(stage!==endingStage){endingStage=stage;if(stage===1)[0,350,800].forEach(delay=>setTimeout(()=>audio.tone(85,.23,.12),delay));}
+  $('endingMessage').textContent=['CONTACT: Both payments received. Your debt is cleared.','The rain is the only sound. Then, three knocks.','THE COLLECTOR: Six nights. Every dollar. You have earned your way out.','An envelope slides across the threshold. One more address. One more contract.'][stage];
+  $('endingChoices').classList.toggle('hidden',stage<3);
+  $('endingVotes').textContent=state.players.filter(p=>p.connected).map(p=>p.name+': '+(state.ending.votes[p.id]||'deciding')).join(' / ');
+  $('endingTimer').textContent=Math.max(0,Math.ceil((state.ending.deadline-gameNow())/1000))+'s / Majority decides. Ties and missing votes leave safely.';
+}
+document.querySelectorAll('[data-ending]').forEach(b=>b.onclick=async()=>{const r=await command('ending:vote',{choice:b.dataset.ending});notify(r.text);});
