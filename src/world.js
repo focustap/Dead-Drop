@@ -12,7 +12,7 @@ export class World{
     this.callbacks=callbacks;this.scene=new THREE.Scene();this.scene.background=new THREE.Color('#101a1a');this.scene.fog=new THREE.FogExp2('#101b1c',.035);
     this.camera=new THREE.PerspectiveCamera(77,1,.06,70);this.camera.rotation.order='YXZ';
     this.renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio,1.65));this.renderer.shadowMap.enabled=true;
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio,1.25));this.renderer.shadowMap.enabled=true;
     this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;this.renderer.outputColorSpace=THREE.SRGBColorSpace;
     this.renderer.toneMapping=THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1;
     container.append(this.renderer.domElement);
@@ -41,7 +41,7 @@ export class World{
     const lightFixture=mat('#50544a',.48,.5);box(scene,2.6,.12,.7,0,3.0,.1,lightFixture);
     box(scene,2.25,.045,.52,0,2.92,.1,new THREE.MeshStandardMaterial({color:'#b8b6a0',emissive:'#8c8e70',emissiveIntensity:.6}));
     const ambient=new THREE.HemisphereLight('#9bc0b0','#1a2425',.7);scene.add(ambient);
-    const overhead=new THREE.PointLight('#f2daaa',35,10,2);overhead.position.set(0,2.6,0);overhead.castShadow=true;overhead.shadow.mapSize.set(1024,1024);scene.add(overhead);this.lights.overhead=overhead;
+    const overhead=new THREE.PointLight('#f2daaa',35,10,2);overhead.position.set(0,2.6,0);overhead.castShadow=true;overhead.shadow.mapSize.set(512,512);scene.add(overhead);this.lights.overhead=overhead;
     const glow=new THREE.PointLight('#64cbb4',9,4.3,2);glow.position.set(-1.3,1.75,-2.55);scene.add(glow);
     const threat=new THREE.PointLight('#c94241',4,4,2);threat.position.set(4.25,2,-1.6);scene.add(threat);
     // Four independent workstations arranged along the far and side walls.
@@ -53,7 +53,7 @@ export class World{
       for(let col=0;col<8;col++)for(let row=0;row<3;row++)box(scene,.049,.008,.055,x-.245+col*.07,.938,z+.085+row*.085,mat('#495957',.8,.1));
       box(scene,.43,.07,.4,x,.44,z+.78,wood2);box(scene,.10,.45,.10,x,.19,z+.78,leg);
       box(scene,.41,.50,.07,x,.78,z+.96,mat('#313e3a'));
-      this.interactions.push({id:'computer',label:'WORKSTATION '+(i+1),x,z:z+.6,range:1.55,desk:i});
+      this.interactions.push({id:'computer',label:'WORKSTATION '+(i+1),x,z:z+.6,range:3.1,desk:i});
     }
     // Supplies door with metal frame and peephole.
     box(scene,.18,2.48,1.5,4.82,1.25,-1.45,metal);
@@ -82,7 +82,7 @@ export class World{
     this.lights.bulb=overhead;
   }
   animate(){
-    const loop=()=>{requestAnimationFrame(loop);const dt=Math.min(.05,this.clock.getDelta());
+    const loop=()=>{requestAnimationFrame(loop);const dt=Math.min(.2,this.clock.getDelta());
       if(this.callbacks.canMove?.()&&document.pointerLockElement===this.renderer.domElement){
         const speed=this.keys.has('ShiftLeft')||this.keys.has('ShiftRight')?4:2.8;
         let forward=(this.keys.has('KeyW')?1:0)-(this.keys.has('KeyS')?1:0),side=(this.keys.has('KeyD')?1:0)-(this.keys.has('KeyA')?1:0);
