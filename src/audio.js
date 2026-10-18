@@ -14,11 +14,12 @@ export class Soundscape{
   alarm(){this.tone(1450,.8,.35);setTimeout(()=>this.tone(93,.8,.28),90);setTimeout(()=>this.tone(920,.45,.22),200);}
   collector(){this.tone(34,2.8,.3);[0,600,1250].forEach(delay=>setTimeout(()=>this.tone(75,.3,.3),delay));}
   sting(kind='door'){
-    const profile={door:[63,940,.75],window:[125,1700,.65],hall:[39,470,1.1],wardrobe:[91,2300,.8],collector:[28,680,1.8],peep:[110,820,.28]}[kind]||[52,760,.8];
-    this.tone(profile[0],profile[2]+.4,.32);this.tone(profile[1],profile[2],.19);
+    const profile={door:[63,940,.75],window:[125,1700,.65],hall:[39,470,1.1],wardrobe:[91,2300,.8],collector:[28,680,1.8],peep:[86,1780,.9]}[kind]||[52,760,.8];
+    this.tone(profile[0],profile[2]+.4,.4);this.tone(profile[1],profile[2],.34);
+    if(kind==='peep'){this.tone(2600,.3,.35);setTimeout(()=>this.tone(72,.55,.38),110);}
     const c=this.context;if(!c)return;const length=profile[2],buffer=c.createBuffer(1,Math.ceil(c.sampleRate*length),c.sampleRate),data=buffer.getChannelData(0);
     for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*Math.exp(-i/data.length*5);
-    const noise=c.createBufferSource();noise.buffer=buffer;const filter=c.createBiquadFilter();filter.type='bandpass';filter.frequency.value=profile[1];filter.Q.value=1.2;const gain=c.createGain();gain.gain.value=this.reducedEffects?.035:.13;const pan=c.createStereoPanner();pan.pan.value=kind==='window'?.28:kind==='wardrobe'?-.2:0;noise.connect(filter);filter.connect(gain);gain.connect(pan);pan.connect(this.master);noise.start();
+    const noise=c.createBufferSource();noise.buffer=buffer;const filter=c.createBiquadFilter();filter.type='bandpass';filter.frequency.value=profile[1];filter.Q.value=1.2;const gain=c.createGain();gain.gain.value=this.reducedEffects?.035:kind==='peep'?.26:.2;const pan=c.createStereoPanner();pan.pan.value=kind==='window'?.28:kind==='wardrobe'?-.2:0;noise.connect(filter);filter.connect(gain);gain.connect(pan);pan.connect(this.master);noise.start();
   }
   peep(event,now){if(event&&now>=event.revealAt&&this.peepId!==event.id){this.peepId=event.id;this.sting('peep');}}
   scare(){this.tone(52,1.4,.35);this.tone(760,.6,.22);setTimeout(()=>this.tone(130,.8,.18),120);}
