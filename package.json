@@ -1,12 +1,12 @@
 {
   "name": "dead-drop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "private": true,
   "scripts": {
     "start": "node server/index.js",
-    "test": "node --test tests/*.test.js",
-    "check": "node --check shared/core.js && node --check server/index.js && node --check src/app.js && node --check src/world.js && node --check src/security.js && node --check scripts/build.js",
+    "test": "node scripts/test.js",
+    "check": "node scripts/check.js",
     "build": "node scripts/build.js",
     "test:browser": "playwright test"
   },
