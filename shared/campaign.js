@@ -45,6 +45,8 @@ export function finishNight(r,now){
   }
   r.summary={day:r.day,...r.ledger,gross,net:gross-r.ledger.expenses-r.ledger.losses,quota:r.quota,quotaPaid:paid,cycleEnd,cycleMet:met,cycleEarned:r.cycleEarned,cycleRequired:r.quota,bank:r.bank,nightsRemaining:cycleEnd?0:nightsRemaining(r.day)-1};
   r.history.push(r.summary);
+  // A paused bundle cannot survive dawn and charge a surprise penalty next shift.
+  for(const x of Object.values(r.extractions||{}))if(!x.sold)x.failed=true;
   r.phase=cycleEnd&&!met?'collector':r.day===6?'ending':'summary';
   r.reason=r.phase==='collector'?'The quota is unpaid. The Collector has your address.':r.phase==='ending'?'Both payments accepted. The debt is cleared.':'';
   r.intrusions={};r.challenges={};r.horror.active=null;r.curtains=null;r.nightEnds=now;

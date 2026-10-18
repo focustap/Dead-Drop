@@ -99,3 +99,7 @@ test('local deliveries and outages appear in market news without a guaranteed pr
 test('reaching the wardrobe before the rare stalker occupies it preserves individual hiding counterplay',t=>{
  const c=setup(t),{r}=c;r.horror.recoveryUntil=0;startEncounter(r,'window',c.now);t.mock.method(Math,'random',()=>.01);c.advance(23000);stand(r,'hide');assert.equal(act(r,'hide:enter').ok,true);assert.equal(r.horror.wardrobe,null);assert.equal(r.players.a.hidden,true);c.advance(1);assert.equal(r.players.a.scare,undefined);assert.equal(r.players.b.scare.kind,'window');
 });
+
+test('dawn closes unsold evidence without a delayed penalty against the next shift wallet',t=>{
+ const c=setup(t),{r}=c,target=mount(r,'trace');act(r,'remote:solve',{answer:target.solution});act(r,'remote:folder',{folder:'vault'});act(r,'remote:read',{file:'route.bundle'});assert.equal(act(r,'remote:extract').ok,true);const bank=r.bank;r.nightEnds=c.now+1;c.advance(1);assert.equal(r.extractions[target.id].failed,true);assert.equal(r.bank,bank);act(r,'night:next');c.advance(1);assert.equal(r.bank,bank);assert.equal(act(r,'remote:sell',{id:target.id}).ok,false);assert.equal(r.bank,bank);
+});
