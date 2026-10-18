@@ -78,8 +78,13 @@ test('remote lease pauses for physical danger and power loss, but expires during
   const c=setup(t),{r}=c;connect(r,'trace');const original=r.remoteSessions.a.expires;startEncounter(r,'echo',c.now);c.advance(4000);assert.equal(r.remoteSessions.a.expires,original+4000);
   r.horror.active=null;r.environment.power=false;c.advance(10000);assert.equal(r.remoteSessions.a.expires,original+14000);r.environment.power=true;c.advance(100000);assert.equal(r.remoteSessions.a,undefined);
 });
-test('inherited remote ids cannot corrupt money, and scrape cooldown prevents spam',t=>{
-  const {r}=setup(t);for(const id of ['__proto__','constructor','toString'])for(const action of ['remote:start','remote:sell'])assert.equal(gameAction(r,'a',action,{id}).ok,false);
-  assert.equal(r.bank,185);terminalCommand(r,'a','connect NOVA-17');terminalCommand(r,'a','scrape finances');assert.match(terminalCommand(r,'a','scrape backups').text,/cooling/);assert.equal(r.scans,1);
+test('inherited remote ids cannot corrupt money, and scraping has a single timed operation without cooldown',t=>{
+  const c=setup(t),{r}=c;for(const id of ['__proto__','constructor','toString'])for(const action of ['remote:start','remote:sell'])assert.equal(gameAction(r,'a',action,{id}).ok,false);
+  assert.equal(r.bank,185);assert.equal(gameAction(r,'a','computer:enter').ok,true);
+  terminalCommand(r,'a','connect NOVA-17');const first=terminalCommand(r,'a','scrape finances');
+  assert.ok(first.scanId);assert.match(terminalCommand(r,'a','scrape backups').text,/SCAN IN PROGRESS/);assert.equal(r.scans,0);
+  c.advance(10000);assert.equal(r.scans,1);
+  const next=terminalCommand(r,'a','scrape backups');
+  assert.ok(next.scanId);assert.notEqual(next.scanId,first.scanId);
   assert.equal(THREATS.length,12);
 });
