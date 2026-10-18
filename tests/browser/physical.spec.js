@@ -68,9 +68,11 @@ test('walk, inspect a courier, grow at the tent, carry, pack and deliver through
     room.garden.growth=100;await page.waitForTimeout(300);await page.screenshot({path:'test-results/garden.png'});
     await page.locator('[data-action="garden:harvest"]').click();await expect.poll(()=>room.players[id].carrying).toBe(3);await page.keyboard.press('Escape');
     await walk(.6,2.3);await interact(.6,2.9,'PACK HARVEST');await page.locator('[data-action="pack:deposit"]').click();await page.locator('[data-action="pack:seal"]').click();await expect.poll(()=>room.inventory.packages).toBe(1);await page.keyboard.press('Escape');
-    await walk(-1.8,2.3);await interact(-1.8,3.15,'WARDROBE');await expect(page.locator('#hiding')).toBeVisible();
-    room.horror.recoveryUntil=0;startEncounter(room,'window');room.horror.active.attackAt=Date.now()-1;room.horror.active.ends=Date.now()+10000;
-    await expect(page.locator('#hideStatus')).toContainText('FOOTSTEPS');await page.screenshot({path:'test-results/wardrobe.png'});await expect.poll(()=>room.horror.active,{timeout:15000}).toBe(null);expect(room.players[id].scare).toBeUndefined();await page.locator('#leaveHide').click();
+    await walk(2.3,2.6);room.horror.recoveryUntil=0;startEncounter(room,'window');room.horror.active.attackAt=Date.now()+60000;room.horror.active.ends=Date.now()+70000;
+    await aim(1.95,3.3,0);await expect(page.locator('#prompt')).toContainText('CURTAINS');await expect.poll(()=>Date.now()>=room.horror.active.approachUntil,{timeout:15000}).toBe(true);await frameBarrier();await page.screenshot({path:'test-results/courtyard.png'});
+    await page.keyboard.down('e');await expect(page.locator('#curtainHold')).toBeVisible();await expect.poll(()=>room.curtains?.closed,{timeout:15000}).toBe(true);await page.keyboard.up('e');
+    expect(room.horror.active.phase).toBe('retreating');room.horror.active.ends=Date.now()+30000;await page.screenshot({path:'test-results/curtains.png'});room.horror.active.ends=Date.now()+100;await expect.poll(()=>room.horror.active).toBe(null);expect(room.players[id].scare).toBeUndefined();
+    await walk(-1.8,2.3);await interact(-1.8,3.15,'WARDROBE');await expect(page.locator('#hiding')).toBeVisible();await page.locator('#leaveHide').click();
     await walk(-1.8,1.1);await walk(-3.85,1.1);
     room.alley={...visitor('buyer',Date.now()-8000,'alley'),leaveAt:Date.now()+60000,next:Date.now()+65000};await interact(-4.03,1.15,'DEAD DROP');await expect.poll(()=>room.ledger.deliveries).toBe(210);
     expect(room.inventory.packages).toBe(0);expect(errors).toEqual([]);

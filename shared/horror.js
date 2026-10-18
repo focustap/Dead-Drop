@@ -12,7 +12,7 @@ export const THREATS=[
   {id:'power',name:'Bad Wiring',look:'The lamps buzz and dim before the terminals die.',sign:'Twelve seconds of ballast buzzing.',behavior:'Stops computers and plant growth until the hallway breaker is reset.',counter:'Check the peephole, enter the hallway, reset the box opposite door 204, and return. There is no deadline after the power trips.',cost:'Lost working time. Growing progress is preserved.'},
   {id:'camera',name:'Blind Spot',look:'Rolling noise replaces the alley feed.',sign:'Interference on both the monitor and fullscreen CCTV.',behavior:'Clears after ten seconds, or four with shielded wiring.',counter:'Wait for the feed before releasing a shipment.',cost:'No direct loss; a blind drop can feed a thief.'}
 ];
-export function newHorror(now){return {locked:true,active:null,recoveryUntil:now+35000,serial:0,ambient:null};}
+export function newHorror(now){return {locked:true,active:null,recoveryUntil:now+65000,serial:0,ambient:null};}
 const result=(ok,text)=>({ok,text});
 export function startEncounter(r,kind,now=Date.now()){
   const h=r.horror;
@@ -58,12 +58,13 @@ export function tickHorror(r,now){
 export function releaseCurtains(r,id,now){
   const hold=r.curtains,a=r.horror.active;if(!hold||hold.owner!==id||hold.closed)return;
   r.curtains=null;
-  if(a?.kind==='window'&&a.phase!=='retreating'){a.attackAt=Math.min(a.attackAt,now+3500);a.ends=a.attackAt+10000;}
+  if(a?.kind==='window'&&a.phase!=='retreating'){a.attackAt=Math.min(a.attackAt,now+6500);a.ends=a.attackAt+10000;}
 }
 export function horrorAction(r,p,action,now){
   if(action==='curtain:release'){releaseCurtains(r,p.id,now);return result(true,'Curtains released.');}
   if(action==='curtain:hold'){
     const a=r.horror.active;
+    if(a?.phase==='retreating'&&r.curtains?.owner===p.id&&r.curtains.closed)return result(true,'Curtains secured.');
     if(a?.kind!=='window'||a.phase==='hunting'||a.phase==='retreating')return result(false,'No prowler at the curtains.');
     if(!atStation(p,'curtains')||p.zone!=='apartment'||p.hidden)return result(false,'Stand at the window.');
     if(r.curtains&&now-r.curtains.lastPulse>2000)releaseCurtains(r,r.curtains.owner,now);

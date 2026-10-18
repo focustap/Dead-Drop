@@ -148,7 +148,7 @@ export class World{
     for(const t of this.interactions){
       if(this.zone==='hall'&&!['breaker','return'].includes(t.id)||this.zone!=='hall'&&['breaker','return'].includes(t.id))continue;
       const d=new THREE.Vector3(t.x-p.x,-.5,t.z-p.z),len=d.length();
-      if(t.id==='curtains'&&this.courtyard?.state?.horror.active?.kind!=='window')continue;
+      if(t.id==='curtains'&&(this.courtyard?.state?.horror.active?.kind!=='window'||this.courtyard.state.horror.active.phase!=='warning'))continue;
       if(len>t.range)continue;
       const facing=d.normalize().dot(dir);
       if(facing>.05 && facing/Math.max(.4,len)>score){best=t;score=facing/Math.max(.4,len);}

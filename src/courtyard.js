@@ -19,10 +19,17 @@ function foldedCurtain(s){
   geometry.computeVertexNormals();const cloth=material('#514a3d');cloth.side=THREE.DoubleSide;
   const mesh=new THREE.Mesh(geometry,cloth);mesh.position.set(.8,1.58,3.80);mesh.castShadow=true;s.add(mesh);return mesh;
 }
+function brickTexture(){
+  const canvas=document.createElement('canvas');canvas.width=canvas.height=256;const c=canvas.getContext('2d');c.fillStyle='#353b36';c.fillRect(0,0,256,256);
+  const tones=['#5f5147','#6b5d50','#756653','#665b50'];
+  for(let row=0;row<8;row++)for(let col=-1;col<5;col++){const x=col*64+(row%2)*32,y=row*32;c.fillStyle=tones[(row*7+col+8)%tones.length];c.fillRect(x+2,y+2,60,28);c.fillStyle='#252f2925';c.fillRect(x+3,y+23,60,6);}
+  for(let i=0;i<1800;i++){const x=(i*73)%256,y=(i*109+Math.floor(i/256)*13)%256;c.fillStyle=i%2?'#00000012':'#d2c8a80b';c.fillRect(x,y,2,1);}
+  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(10,10);return texture;
+}
 export class Courtyard{
   constructor(scene){
     this.scene=scene;const existing=new Set(scene.children);const wet=material('#364448',.19,.25),brick=material('#625650'),metal=material('#394544',.5,.65);
-    brick.map=wornTexture('#9c8e7d');wet.map=wornTexture('#777f7c',true);
+    brick.map=brickTexture();wet.map=wornTexture('#777f7c',true);
     box(scene,22,.16,17,0,-.18,12.5,wet);
     box(scene,22,12,.4,0,5.8,20.8,brick);box(scene,.4,12,17,-11,5.8,12.5,brick);box(scene,.4,12,17,11,5.8,12.5,brick);
     // Recessed windows and projecting fire escapes give the view several depth planes.
