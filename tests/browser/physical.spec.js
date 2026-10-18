@@ -4,7 +4,10 @@ import {visitor} from '../../shared/campaign.js';
 import {startEncounter} from '../../shared/horror.js';
 
 test('walk, inspect a courier, grow at the tent, carry, pack and deliver through the chute',async({page})=>{
-  test.setTimeout(300000);
+  test.setTimeout(420000);
+  // Full physical traversal uses the real renderer and movement packets. A smaller
+  // viewport keeps software WebGL on two-core CI practical without skipping steps.
+  await page.setViewportSize({width:1100,height:700});
   const game=createApp();await new Promise(r=>game.http.listen(0,'127.0.0.1',r));
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   try{
