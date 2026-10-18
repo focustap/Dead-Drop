@@ -26,7 +26,7 @@ export function visitor(kind,now,location){
 export function phase(v,now){return v.visitor==='empty'?'empty':now<v.waitAt?'approaching':now<v.leaveAt?'waiting':now<v.next?'leaving':'empty';}
 export function clue(v,now){
   const p=phase(v,now);if(p==='empty')return 'No movement.';if(p==='approaching')return 'Footsteps approaching.';if(p==='leaving')return 'Footsteps fading.';
-  return {buyer:'Checks a glowing phone, then waits beside the red tray.',thief:'Keeps glancing behind them; stays away from the light.',courier:'A taped parcel under one arm. Two knocks, then a step back.',intruder:'Empty hands. Leans toward the lock and tests the handle.',stranger:'An empty-handed stranger lingers beyond the tray. No pickup code.',police:'A uniformed patrol checks the alley. Keep the chute closed.',searcher:'Someone searches through the dumpster, ignoring the tray.',pedestrian:'A passerby shelters from the rain. No pickup arranged.'}[v.visitor];
+  const signs={buyer:'Checks a glowing phone, then waits beside the red tray.',thief:'Keeps glancing behind them; stays away from the light.',courier:'A taped parcel under one arm. Two knocks, then a step back.',intruder:'Empty hands. Leans toward the lock and tests the handle.',stranger:'An empty-handed stranger lingers beyond the tray. No pickup code.',police:'A uniformed patrol checks the alley. Keep the chute closed.',searcher:'Someone searches through the dumpster, ignoring the tray.',pedestrian:'A passerby shelters from the rain. No pickup arranged.'};return signs[v.visitor]+(v.visitor==='buyer'&&v.code?' Pickup code '+v.code+'.':'');
 }
 export function finishNight(r,now){
   if(r.phase!=='night')return false;

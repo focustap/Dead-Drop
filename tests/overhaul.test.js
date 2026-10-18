@@ -37,7 +37,7 @@ test('buyer budgets are private, unreasonable offers exhaust patience and final 
 });
 test('negotiated pickup reserves shared stock, lasts thirty seconds, validates quantity and pays once',t=>{
  const c=setup(t),{r}=c,d=deal(r,c.now),bank=r.bank;assert.equal(d.leaveAt-d.arrives,30000);assert.equal(publicState(r,'b').sales.reserved,1);assert.equal(act(r,'sales:list',{quantity:2}).ok,false);
- c.advance(d.arrives-c.now);stand(r,'chute');assert.equal(r.alley.deal,d.id);assert.equal(act(r,'alley:drop',{quantity:2}).ok,false);assert.equal(r.bank,bank);assert.equal(act(r,'alley:drop',{quantity:1}).ok,true);assert.equal(r.bank,bank+d.price);assert.equal(r.inventory.packages,1);
+ c.advance(d.arrives-c.now);stand(r,'chute');assert.equal(r.alley.deal,d.id);assert.ok(publicState(r,'a').alley.clue.includes(d.code));assert.equal(act(r,'alley:drop',{quantity:2}).ok,false);assert.equal(r.bank,bank);assert.equal(act(r,'alley:drop',{quantity:1}).ok,true);assert.equal(r.bank,bank+d.price);assert.equal(r.inventory.packages,1);
  act(r,'alley:drop',{quantity:1});assert.equal(r.bank,bank+d.price);
 });
 test('missed pickups release reservations without paying and random alley visitors never create customers',t=>{
