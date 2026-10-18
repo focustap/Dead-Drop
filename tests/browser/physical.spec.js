@@ -25,7 +25,7 @@ test('walk, inspect a courier, grow at the tent, carry, pack and deliver through
       const end=Date.now()+20000;
       while(Math.hypot(room.players[id].x-x,room.players[id].z-z)>.24){
         if(Date.now()>end)throw Error('Walk stuck at '+JSON.stringify(room.players[id])+' aiming at '+x+','+z);
-        await aim(x,z);await page.keyboard.down('w');await page.waitForTimeout(Math.min(300,Math.max(70,Math.hypot(room.players[id].x-x,room.players[id].z-z)/2.8*650)));await page.keyboard.up('w');await page.waitForTimeout(90);
+        await aim(x,z);await page.keyboard.down('w');await page.waitForTimeout(Math.min(300,Math.max(110,Math.hypot(room.players[id].x-x,room.players[id].z-z)/2.8*650)));await page.keyboard.up('w');await page.waitForTimeout(160);
       }
     };
     const interact=async(x,z,label)=>{await aim(x,z,-.25);await expect(page.locator('#prompt')).toContainText(label);await page.keyboard.press('e');};
