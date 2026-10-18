@@ -48,6 +48,7 @@ function updateHud(){
     const v=viewOpen==='alley'?state.alley?.visitor:state.door?.visitor;
     $('surveillance').dataset.visitor=v||'empty';
     $('surveillancePresence').textContent=(viewOpen==='alley'?state.alley:state.door)?.clue||'No movement.';
+    if(viewOpen==='peephole')$('surveillanceInstruction').textContent=state.horror.peep&&gameNow()<state.horror.peep.ends?"I wouldn't go outside right now...":'LOOK THROUGH THE DOOR';
     $('surveillance').classList.toggle('signalLost',viewOpen==='alley'&&(!state.environment.power||state.environment.cameraUntil>gameNow()));
     $('surveillanceStamp').textContent=new Date().toLocaleTimeString('en-GB',{hour12:false});
   }
@@ -313,13 +314,14 @@ function renderHorror(){
   const p=state.players.find(p=>p.id===self),a=state.horror.active,now=gameNow();
   $('toggleBolt').textContent=state.horror.locked?'UNLOCK BOLT':'LOCK BOLT';
   $('enterHall').disabled=state.horror.locked;
+  if(a?.kind==='door'&&a.phase==='warning')$('horrorStatus').textContent='THE HANDLE IS TURNING / BRACE THE DOOR BEFORE IT GETS IN';
   $('hiding').classList.toggle('hidden',!p?.hidden||state.phase!=='night');
   $('hideStatus').textContent=a?.kind==='window'?'KEEP STILL / '+(a.phase==='warning'?'TAPPING AT THE GLASS':Math.ceil(Math.max(0,a.ends-now)/1000)+'s UNTIL FOOTSTEPS FADE'):'QUIET / YOU CAN LEAVE';
   const threatText=a?({door:'LATCH RATTLING / '+(state.horror.locked?'BOLT LOCKED':'BOLT UNLOCKED'),window:a.phase==='retreating'?'THE PROWLER IS LEAVING':a.phase==='warning'?'PROWLER OUTSIDE / HOLD E AT THE CURTAINS':a.phase==='stalking'?'FOOTSTEPS CROSS THE ROOM':'WINDOW BREACHED / FIND COVER',hall:a.phase==='warning'?'HEAVY FOOTSTEPS APPROACHING':'SHADOW IN THE HALLWAY / WAIT INSIDE',echo:'A SOUND FROM THE EMPTY ROOMS'})[a.kind]:'';
   const held=state.curtains;if(curtainHolding&&(held?.closed||a?.kind!=='window'||a.phase!=='warning'))stopCurtains();
   $('curtainHold').classList.toggle('hidden',!curtainHolding);$('curtainHoldText').textContent=held?.owner===self?'HOLD E / '+Math.min(5,(now-held.started)/1000).toFixed(1)+' / 5s':'TAKING THE CURTAINS';
   if(state.phase==='collector'){if(lastCollector!==state.collector.start){lastCollector=state.collector.start;closePanel();closeStation();closeView();closeGuide();release();audio.collector();} }
-  $('horrorStatus').textContent=state.phase==='collector'?'QUOTA UNPAID / THE COLLECTOR IS HERE':threatText;$('horrorStatus').classList.toggle('hidden',!a&&state.phase!=='collector');
+  $('horrorStatus').textContent=state.phase==='collector'?'QUOTA UNPAID / THE COLLECTOR IS HERE':state.phase==='breach'?'THE LOCKSMITH IS INSIDE':a?.kind==='door'&&a.phase==='warning'?'THE HANDLE IS TURNING / BRACE THE DOOR':threatText;$('horrorStatus').classList.toggle('hidden',!a&&!['collector','breach'].includes(state.phase));
   const caught=p?.scare&&p.scare.until>now;$('scareShade').classList.toggle('hidden',!caught);
   if(caught&&lastScare!==state.day+':'+p.scare.id){lastScare=state.day+':'+p.scare.id;closePanel();closeStation();closeView();closeGuide();release();if(p.scare.kind==='collector')audio.sting('collector');else audio.sting(p.scare.kind);notify(p.scare.kind==='collector'?'The Collector has come for payment.':'You were found. Catch your breath.');}
 }
