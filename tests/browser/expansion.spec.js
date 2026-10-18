@@ -25,7 +25,7 @@ test('survival site and remote archive can be investigated, extracted and sold t
     const cipher=(await page.locator('.remoteDocument pre').textContent()).split(': ')[1];
     const answer=[...cipher].map(c=>String.fromCharCode(65+(c.charCodeAt(0)-65-shift+26)%26)).join('');
     await page.locator('#remoteAnswer').fill(answer);await page.locator('#remoteSolve button').click();await expect(page.locator('#remoteSolve button')).toHaveText('SEAL OPEN');
-    await page.locator('[data-folder="vault"]').click();await page.locator('[data-file="payload.arc"]').click();await page.screenshot({path:'test-results/remote-files.png'});
+    await page.locator('[data-folder="vault"]').click();await page.locator('[data-file="payload.arc"]').click();await expect(page.locator('.remoteDocument pre')).toContainText('Encrypted recovery payload');await page.screenshot({path:'test-results/remote-files.png'});
     await page.locator('[data-remote="extract"]').click();await expect(page.locator('.remoteEmpty')).toBeVisible();
     await page.locator('[data-tab="market"]').click();await page.locator('[data-evidence]').click();await expect(page.locator('[data-evidence]')).toHaveText('SOLD');expect(room.ledger.contracts).toBe(240);expect(errors).toEqual([]);
   }finally{await page.close();await game.close();}

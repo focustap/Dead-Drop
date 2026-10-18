@@ -269,7 +269,7 @@ const world=new World($('scene'),{
   canMove:()=>!state?.players.find(p=>p.id===self)?.hidden&&!(state?.players.find(p=>p.id===self)?.stunnedUntil>gameNow())&&active&&(!remote||socket?.connected)&&state?.phase==='night'&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&!state?.intrusion&&!state?.challenge,
   onLock:locked=>{if(!active)return;if(!locked&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&!state?.intrusion)$('prompt').textContent='CLICK ROOM TO LOOK · WASD MOVE';},
   onMove:pos=>{if(remote){if(socket?.connected)socket.emit('player:move',pos);}else if(local){movePlayer(local,self,pos);}},
-  onFocus:focus=>{nearby=focus;if(active&&state?.phase==='night'&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&!state?.intrusion&&!state?.challenge)$('prompt').textContent=focus?'[E] '+focus.label:(document.pointerLockElement===world.renderer.domElement?'':'CLICK ROOM TO LOOK · WASD MOVE');else $('prompt').textContent='';}
+  onFocus:focus=>{nearby=focus;if(!(state?.players.find(p=>p.id===self)?.stunnedUntil>gameNow())&&active&&state?.phase==='night'&&!panelOpen&&!stationOpen&&!guideOpen&&!viewOpen&&!state?.intrusion&&!state?.challenge)$('prompt').textContent=focus?'[E] '+focus.label:(document.pointerLockElement===world.renderer.domElement?'':'CLICK ROOM TO LOOK · WASD MOVE');else $('prompt').textContent='';}
 });
 window.addEventListener('keydown',async e=>{
   if(state?.players.find(p=>p.id===self)?.hidden){if(e.code==='KeyE'||e.key==='Escape'){e.preventDefault();await command('hide:leave');}return;}
