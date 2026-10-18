@@ -23,11 +23,19 @@ test('terminal can navigate, read files and scrape a directory',()=>{
   assert.match(terminalCommand(room,'p1','cd finances').text,/finances/);
   assert.match(terminalCommand(room,'p1','cat budget.txt').text,/Quarterly budget/);
   const scan=terminalCommand(room,'p1','scrape');
-  assert.match(scan.text,/REC-[A-Z0-9]+-[A-Z0-9]+/);
-  assert.ok(room.scans===1);
+  assert.match(scan.text,/Please wait 10 seconds/);
+  assert.ok(scan.scanId);
+  assert.equal(room.scans,0);
+  assert.equal(room.terminals.p1.scan.finishesAt-room.terminals.p1.scan.startedAt,10000);
+  tick(room,room.terminals.p1.scan.finishesAt-1);
+  assert.equal(room.scans,0);
+  tick(room,room.terminals.p1.scan.finishesAt);
+  assert.equal(room.scans,1);
+  assert.match(room.terminals.p1.lastScan.text,/REC-[A-Z0-9]+-[A-Z0-9]+/);
 });
 test('decoy codes cannot be sold and valid discoveries increase only the shared bank',()=>{
   const room=roomWithPlayer();terminalCommand(room,'p1','connect NOVA-17');terminalCommand(room,'p1','scrape finances');
+  tick(room,room.terminals.p1.scan.finishesAt);
   const valid=Object.keys(room.records).find(code=>room.records[code].discovered && room.records[code].kind==='CARD');
   assert.ok(valid);
   assert.match(gameAction(room,'p1','market:verify',{code:'REF-99999'}).text,/NOT RECOGNIZED/);
@@ -41,7 +49,10 @@ test('decoy codes cannot be sold and valid discoveries increase only the shared 
 test('routine scanning stays quiet; training retains arrow defense',()=>{
   const room=roomWithPlayer();
   terminalCommand(room,'p1','connect NOVA-17');
-  for(const folder of ['finances','documents','backups'])terminalCommand(room,'p1','scrape '+folder);
+  for(const folder of ['finances','documents','backups']){
+    assert.ok(terminalCommand(room,'p1','scrape '+folder).scanId);
+    tick(room,room.terminals.p1.scan.finishesAt);
+  }
   assert.equal(room.intrusions.p1,undefined);terminalCommand(room,'p1','training');
   const {sequence}=room.intrusions.p1;
   assert.ok(sequence.length>=6);
