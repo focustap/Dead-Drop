@@ -27,3 +27,26 @@ h3{font:800 22px var(--display);letter-spacing:.025em;margin:0 0 10px}.section{b
 .guideBox{position:relative;width:min(590px,94vw);padding:34px 37px;border:1px solid #6a9c90;background:#102126;box-shadow:0 25px 90px #000;max-height:92vh;overflow:auto}.guideBox h2{font:800 34px var(--display);margin:14px 0}.guideBox p{font:12px/1.8 var(--mono);color:#b3c7c0}.guideBox code{color:#b4f1c8}.guideClose{position:absolute;right:16px;top:12px;border:0;background:transparent;font-size:24px}.guideBox .primary{margin-top:5px}
 @keyframes flash{0%{background:#9b0e25eb}100%{background:#11070cda}}
 @media(max-width:850px){#hud{padding:12px 14px;gap:10px;flex-wrap:wrap;align-items:center}#hud .brand{width:100%;font-size:23px}.stat{font-size:8px;min-width:45px}.stat b{font-size:12px}#hud .minor{margin-left:auto}.panel{inset:4% 2%}.tabs{overflow-x:auto}.tabs button{font-size:10px;padding:12px}.computerView{padding:11px}.lowHud{left:10px;bottom:15px}#controls{right:10px;bottom:12px;max-width:48%;font-size:8px}.lobby{padding:23px}.lobby h1{font-size:86px}.actions{grid-template-columns:1fr}.split{grid-template-columns:1fr}.arrows span{min-width:37px;font-size:24px}.breach{padding:23px 10px}}
+/* Live in-world CCTV and full-screen peephole. Camera imagery is rendered in WebGL, not text. */
+.surveillance{position:absolute;inset:0;z-index:12;pointer-events:none;color:#d8eddc;font:11px var(--mono);letter-spacing:.10em}
+.surveillanceFrame{position:absolute;inset:0;border:15px solid #02080ac2;pointer-events:none}
+.surveillanceFrame:before{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background:repeating-linear-gradient(0deg,#0000 0 3px,#04141642 4px 5px);opacity:.48}
+.surveillanceFrame:after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse at center,#0000 28%,#0013166b 87%,#000c)}
+.surveillanceHeader,.surveillanceBottom{position:absolute;z-index:3;left:25px;right:25px;display:flex;align-items:center;gap:14px;text-shadow:0 2px 8px #000,0 0 5px #000}
+.surveillanceHeader{top:17px}.surveillanceHeader b{font-size:13px;letter-spacing:.14em}.surveillanceHeader #surveillanceStamp{margin-left:auto;color:#d9ede3}
+.surveillanceBottom{bottom:20px;justify-content:space-between}.surveillanceBottom span:last-child{color:#ffcb83}
+.surveillanceHeader button{pointer-events:auto;color:#f0fff3;background:#0d231ecb;border:1px solid #b4e5c2;padding:10px 13px;font:10px var(--mono);margin-left:18px}
+.surveillanceHeader button:hover{background:#2e584d}
+.surveillanceCenter{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2;opacity:.5}
+.surveillanceCenter span{font-size:18px}
+.liveDot{width:9px;height:9px;border-radius:100%;background:#ec5656;box-shadow:0 0 9px #f54454;animation:livePulse 1.15s linear infinite}
+@keyframes livePulse{50%{opacity:.15}}
+.surveillance[data-view="peephole"] .surveillanceFrame{border:0}
+.surveillance[data-view="peephole"] .surveillanceFrame:before{opacity:.06}
+.surveillance[data-view="peephole"] .surveillanceFrame:after{background:radial-gradient(ellipse 32% 47% at center,#0000 0%,#0000 55%,#000c 83%,#000 100%);}
+.surveillance[data-view="peephole"] .surveillanceCenter{opacity:.04}
+.surveillance[data-view="peephole"] .surveillanceHeader,.surveillance[data-view="peephole"] .surveillanceBottom{color:#e6d8bf}
+body:has(.surveillance:not(.hidden)) #prompt{display:none}
+body:has(.surveillance:not(.hidden)) #crosshair{display:none}
+body:has(.surveillance:not(.hidden)) #status{display:none}
+@media(max-width:650px){.surveillanceHeader{top:9px;left:10px;right:10px;flex-wrap:wrap;gap:6px}.surveillanceHeader b{font-size:10px}.surveillanceHeader button{margin-left:auto;padding:7px}.surveillanceBottom{left:10px;right:10px;bottom:10px;font-size:9px}.surveillanceFrame{border-width:6px}}
