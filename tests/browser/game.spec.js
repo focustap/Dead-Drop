@@ -41,7 +41,10 @@ test('an intrusion appears on command, responds to arrows and preserves the wall
   await expect(page.locator('#intrusion')).toBeVisible();
   const symbols=await page.locator('#arrows span').allTextContents();
   const keys={'←':'ArrowLeft','→':'ArrowRight','↑':'ArrowUp','↓':'ArrowDown'};
-  for(const symbol of symbols){await page.keyboard.press(keys[symbol]);}
+  for(const [i,symbol] of symbols.entries()){
+    await page.keyboard.press(keys[symbol]);
+    if(i<symbols.length-1)await expect(page.locator('#arrows span.done')).toHaveCount(i+1);
+  }
   await expect(page.locator('#intrusion')).toBeHidden();
   await expect(page.locator('#bank')).toHaveText(bank);
 });

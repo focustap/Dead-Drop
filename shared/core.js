@@ -48,10 +48,10 @@ export function publicState(room,id){
     discovered:Object.entries(records).filter(([,r])=>r.discovered).map(([code,r])=>({code,kind:r.kind,sold:r.sold,value:r.value,target:r.target})),
     targets:Object.keys(targets)};
 }
-function beginIntrusion(room,id){
+function beginIntrusion(room,id,training=false){
   if(room.intrusions[id] || !room.players[id])return false;
   const sequence=Array.from({length:6+Math.floor(Math.random()*2)},()=>pick(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown']));
-  room.intrusions[id]={sequence,index:0,expires:Date.now()+9500};
+  room.intrusions[id]={sequence,index:0,expires:Date.now()+(training?30000:9500),training};
   log(room,'INTRUSION ALERT: '+room.players[id].name+"'s workstation is under attack!");
   room.heat=clamp(room.heat+3,0,100);return true;
 }
@@ -98,7 +98,7 @@ export function terminalCommand(room,id,line){
     else{state.target=name;state.cwd='/';output='Dialing '+name+' ...\nCONNECTION ESTABLISHED.\nUse "ls" to explore its five folders.';}
   }
   else if(verb==='disconnect'){state.target=null;state.cwd='/';output='Remote session closed.';}
-  else if(verb==='training'){beginIntrusion(room,id);output='TRAINING ALARM: defend using arrows or WASD.';}
+  else if(verb==='training'){beginIntrusion(room,id,true);output='TRAINING ALARM: defend using arrows or WASD.';}
   else if(!active)output='Not connected. Try "targets" then "connect NOVA-17".';
   else if(verb==='pwd')output=active.name+':'+state.cwd;
   else if(verb==='ls')output=state.cwd==='/'?dirNames(active).map(x=>x+'/').join('    '):Object.keys(active.folders[state.cwd.slice(1)]||{}).join('    ');
